@@ -504,11 +504,15 @@ function compileUsStateAbbrev(abbr) {
 // also USPS codes: "Bengaluru, Karnataka, IN" read as Indiana and "Toronto,
 // ON, CA" as California, so always_allow beat the user's own block entry.
 // A two-letter last part after two or more parts is the country slot, never
-// a state. "Austin, TX, US" still keeps TX.
+// a state. "Austin, TX, US" still keeps TX. Providers join several places
+// with "; " (Lever) or " · " (Jobvite), so each place gets its own check:
+// "Bengaluru, Karnataka, IN; Remote" must still drop IN.
 function withoutCountryCodeSlot(lower) {
-  const parts = lower.split(',');
-  if (parts.length < 3 || !/^\s*\p{L}{2}\s*$/u.test(parts.at(-1))) return lower;
-  return parts.slice(0, -1).join(',');
+  return lower.split(/([;·])/).map((place) => {
+    const parts = place.split(',');
+    if (parts.length < 3 || !/^\s*\p{L}{2}\s*$/u.test(parts.at(-1))) return place;
+    return parts.slice(0, -1).join(',');
+  }).join('');
 }
 
 const US_STATE_ALWAYS_ALLOW_MATCHERS = USPS_STATES.flatMap(([name, abbr]) => [
