@@ -37,13 +37,24 @@ function experienceHasRole(text) {
   return false;
 }
 
+// An HTML comment never renders, so a template note under the heading is not a
+// role. Repeat until nothing changes, so "<!-<!-- x -->- y -->" leaves no comment.
+/** @param {string} md */
+function withoutHtmlComments(md) {
+  let text = md;
+  for (let prev = ""; prev !== text; ) {
+    prev = text;
+    text = text.replace(/<!--[\s\S]*?-->/g, "");
+  }
+  return text;
+}
+
 /**
  * @param {string} md
  * @returns {CvReadiness}
  */
 export function cvReadiness(md) {
-  // An HTML comment never renders, so a template note under the heading is not a role.
-  const text = (md || "").replace(/<!--[\s\S]*?-->/g, "").trim();
+  const text = withoutHtmlComments(md || "").trim();
   const words = text ? text.split(/\s+/).length : 0;
   const hasExperience = experienceHeading(text) || YEAR_RANGE.test(text);
   const hasSkills = /(^|\n)#{1,3}\s*(skills|technologies|competenc|habilidad)/i.test(text);

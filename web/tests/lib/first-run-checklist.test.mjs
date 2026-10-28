@@ -60,6 +60,7 @@ test("work authorization is not a role, and a subheading under experience is", (
   }
   assert.equal(cvReadiness("## Work Authorization:\nAuthorized to work").scoreable, false);
   assert.equal(cvReadiness("## Experience\n<!-- add your roles here -->").scoreable, false);
+  assert.equal(cvReadiness("## Experience\n<!-<!-- x -->- y -->").scoreable, false);
   assert.equal(cvReadiness("## Experience\n<!-- newest first -->\nFloor lead, Northwind Market").scoreable, true);
 });
 
