@@ -42,7 +42,8 @@ function experienceHasRole(text) {
  * @returns {CvReadiness}
  */
 export function cvReadiness(md) {
-  const text = (md || "").trim();
+  // An HTML comment never renders, so a template note under the heading is not a role.
+  const text = (md || "").replace(/<!--[\s\S]*?-->/g, "").trim();
   const words = text ? text.split(/\s+/).length : 0;
   const hasExperience = experienceHeading(text) || YEAR_RANGE.test(text);
   const hasSkills = /(^|\n)#{1,3}\s*(skills|technologies|competenc|habilidad)/i.test(text);
