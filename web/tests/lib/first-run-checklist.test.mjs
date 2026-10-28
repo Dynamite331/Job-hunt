@@ -83,6 +83,11 @@ test("a range with months on both ends is a role", () => {
   assert.equal(cvReadiness("Floor lead, Northwind Market\nSept. 2019 — Present").scoreable, true);
 });
 
+test("a word that only starts with a month name is not a range", () => {
+  assert.equal(cvReadiness("Floor lead, Northwind Market\n2020 - marketing 2023").scoreable, false);
+  assert.equal(cvReadiness("Floor lead, Northwind Market\n2020 - marzo 2023").scoreable, true);
+});
+
 test("a numeric end month outside 1-12 is not a range", () => {
   for (const range of ["2020 - 99/2023", "2020 - 13/2023", "2020 - 00/2023"]) {
     assert.equal(cvReadiness(`Floor lead, Northwind Market\n${range}`).scoreable, false, range);
