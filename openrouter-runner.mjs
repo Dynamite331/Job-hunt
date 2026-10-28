@@ -41,6 +41,7 @@ import { isMainModule } from './lib/is-main-module.mjs';
 import { withJdArchiveSection } from './lib/jd-archive-section.mjs';
 import { locateApplyReport } from './apply-scope.mjs';
 import { classifyLiveness, isUnreadableVerdict } from './liveness-core.mjs';
+import { fetchJdViaKnownApi } from './browser-extract.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const tracker = new TokenAccumulator();
@@ -532,8 +533,20 @@ export function unreadableJobPage({ status = 0, requestedUrl = '', finalUrl = ''
   return null;
 }
 
-async function fetchJobPage(url) {
+// Wait for a single-page app to render its job description: until the body
+// holds more than 1500 chars, or 15 s. A page that never gets that long (a
+// short posting) is read as it stands.
+export async function waitForJobText(page) {
+  await page.waitForFunction(() => (document.body?.innerText || '').length > 1500, null, { timeout: 15_000 }).catch(() => {});
+}
+
+export async function fetchJobPage(url) {
   assertSafeRemoteUrl(url);
+  const viaApi = await fetchJdViaKnownApi(url);
+  if (viaApi?.text) {
+    const { text } = viaApi;
+    if (!unreadableJobPage({ status: 200, requestedUrl: url, finalUrl: url, text })) return text.slice(0, 16_000);
+  }
   let chromium;
   try {
     ({ chromium } = await import('playwright'));
@@ -548,7 +561,7 @@ async function fetchJobPage(url) {
       browser = await chromium.launch({ headless: true });
       const page = await browser.newPage();
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-      await page.waitForTimeout(2000); // wait for SPA render
+      await waitForJobText(page); // wait for SPA render
       const text = await page.evaluate(() => {
         document.querySelectorAll('script,style,nav,footer,header').forEach(el => el.remove());
         return (document.body?.innerText || document.body?.textContent || '').replace(/\s+/g, ' ').trim();
