@@ -12,6 +12,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { waitForJobText } from '../openrouter-runner.mjs';
+import { toolRequired } from './required-tools.mjs';
 
 const SENTENCE =
   'You will own the internal deploy pipeline across three regions, review infrastructure changes, ' +
@@ -26,17 +27,29 @@ const PAGE = `<!doctype html><html><head><title>Job</title></head><body>
   }, 3000);
 </script></body></html>`;
 
+// Needs a real Chromium: skip where none is installed (the plain test job),
+// except under `test-all.mjs --needs browser`, where a missing browser fails.
 let browser;
+let launchError = null;
 
 before(async () => {
-  browser = await chromium.launch({ headless: true });
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (err) {
+    launchError = err;
+  }
 });
 
 after(async () => {
   await browser?.close().catch(() => {});
 });
 
-test('waitForJobText waits for a job description that renders after 3 s', { timeout: 60_000 }, async () => {
+test('waitForJobText waits for a job description that renders after 3 s', { timeout: 60_000 }, async (t) => {
+  if (launchError) {
+    if (toolRequired('browser')) throw launchError;
+    t.skip('no Chromium');
+    return;
+  }
   const page = await browser.newPage();
   await page.setContent(PAGE);
   await waitForJobText(page);
