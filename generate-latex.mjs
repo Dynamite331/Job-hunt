@@ -311,7 +311,7 @@ export async function runLatexFactGate(content, { root = getCareerOpsRoot(), ext
   if (!existsSync(cvPath)) return { verdict: 'skipped', reason: `no cv.md in ${root}` };
   // Imported lazily, as generate-pdf.mjs does: a test that copies this script
   // alone into a temp workspace has no cv.md and never reaches the import.
-  const { assertFacts } = await import('./verify-cv-facts.mjs');
+  const { assertFacts, stripMarkup } = await import('./verify-cv-facts.mjs');
   const { voiceIssues, voiceTellMessage } = await import('./cv-voice.mjs');
   // An explicit --source that does not exist is a mistyped path, not an empty
   // source. Read as empty, it would leave the claims it was passed to back
@@ -322,9 +322,12 @@ export async function runLatexFactGate(content, { root = getCareerOpsRoot(), ext
   const sourcePaths = [cvPath, join(root, 'article-digest.md'), ...extraPaths];
   // The voice check allows only wording the candidate wrote: cv.md plus any
   // --source file. article-digest.md backs facts, not phrasing.
+  // Strip each file on its own. Joined first, one \begin{document} in a
+  // --source .tex file drops the cv.md lines that came before it.
   let voiceSource = '';
   for (const sourcePath of [cvPath, ...extraPaths]) {
-    voiceSource += `\n${await readFile(sourcePath, 'utf-8')}`;
+    const source = await readFile(sourcePath, 'utf-8');
+    voiceSource += `\n${stripMarkup(source, { keepLineBreaks: true })}`;
   }
   const voiceError = voiceTellMessage(voiceIssues(content, voiceSource), label);
   if (voiceError) return { verdict: 'block', reason: voiceError };

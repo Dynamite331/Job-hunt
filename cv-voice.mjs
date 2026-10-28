@@ -37,9 +37,10 @@ function norm(text) {
   return String(text).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-// A dash between two dates is how a range is written, not a stock tell. The
+// A dash between two years is how a range is written, not a stock tell. The
 // HTML builder prints "2022–2024" from the start and end fields itself.
-const DATE_RANGE_DASH = /(\d)\s*[\u2013\u2014]\s*(?=\d|present\b|current\b|now\b|today\b)/giu;
+// A metric such as "20–30%" is not a date, so it stays a tell.
+const DATE_RANGE_DASH = /((?:19|20)\d{2})\s*[\u2013\u2014]\s*(?=(?:19|20)\d{2}\b|present\b|current\b|now\b|today\b)/giu;
 
 function linesOf(text) {
   const broken = String(text)

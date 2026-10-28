@@ -72,6 +72,15 @@ test('a date range dash and the page title are not stock wording', () => {
   assert.deepEqual(prose.filter((issue) => issue.kind === 'em-dash').map((issue) => issue.value), ['en dash']);
 });
 
+test('a metric range written with a dash is still a stock tell', () => {
+  const source = 'Improved conversion by 20 to 30% on the refund page';
+  const generated = 'Improved conversion by 20\u201330% on the refund page';
+  assert.deepEqual(
+    voiceIssues(generated, source).filter((issue) => issue.kind === 'em-dash').map((issue) => issue.value),
+    ['en dash'],
+  );
+});
+
 test('a number that is not in the source fails, and one that is does not', () => {
   const invented = voiceIssues('Cut deploy time by 40% with the same checklist', SOURCE);
   assert.ok(invented.some((issue) => issue.kind === 'invented-number' && issue.value === '40%'));
@@ -113,6 +122,29 @@ test('generate-latex blocks a stock verb and still blocks an invented metric', (
     const numberReport = JSON.parse(number.stdout);
     assert.equal(numberReport.factCheck.verdict, 'block');
     assert.match(numberReport.factCheck.reason, /40%/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a dash the candidate wrote still counts when --source is a separate tex file', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cv-voice-source-tex-'));
+  try {
+    mkdirSync(join(root, 'output'));
+    mkdirSync(join(root, 'sources'));
+    const line = 'Ran the weekly release train \u2014 the Tuesday one';
+    writeFileSync(join(root, 'cv.md'), `${SOURCE}\n- ${line}\n`);
+    writeFileSync(join(root, 'sources', 'own.tex'), '\\documentclass{article}\n\\begin{document}\nKept my own notes.\n\\end{document}\n');
+    writeFileSync(join(root, 'output', 'copied.tex'), `\\documentclass{article}\n\\begin{document}\n\\resumeItem{${line}}\n\\end{document}\n`);
+    const run = spawnSync(process.execPath, [join(ROOT, 'generate-latex.mjs'), 'output/copied.tex', '--compile-only', '--source', 'sources/own.tex'], {
+      cwd: root,
+      encoding: 'utf-8',
+      timeout: 30_000,
+      env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '' },
+    });
+    const report = JSON.parse(run.stdout);
+    const reason = report.factCheck.reason || '';
+    assert.equal(/dash/.test(reason), false, reason);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
