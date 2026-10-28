@@ -79,7 +79,9 @@ export function editorReducer(state, action) {
       return { ...state, inflight: null, saved: action.content, exists: true, error: null, snapshotPrior: false };
     case "save-failed":
       if (action.content !== state.inflight) return state;
-      return { ...state, inflight: null, error: action.error };
+      // The failed text is the one that was sent. An edit that landed while
+      // that request was in flight is a different draft and can still save.
+      return { ...state, inflight: null, error: state.content === action.content ? action.error : null };
     default:
       return state;
   }

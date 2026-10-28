@@ -46,6 +46,18 @@ test("a failed save stays unsaved and names the error", () => {
   assert.equal(state.inflight, null);
 });
 
+test("an edit made while a save is in flight still autosaves after that save fails", () => {
+  let state = editorReducer(ready("one"), { type: "edit", content: "one two" });
+  state = editorReducer(state, { type: "save-start", content: "one two" });
+  state = editorReducer(state, { type: "edit", content: "one two three" });
+  state = editorReducer(state, { type: "save-failed", content: "one two", error: "write failed" });
+  assert.equal(state.content, "one two three");
+  assert.equal(state.error, null);
+  assert.equal(state.inflight, null);
+  assert.equal(shouldSave(state), true);
+  assert.equal(editorStatus(state).label, "Unsaved");
+});
+
 test("a failed save does not autosave again until the next edit", () => {
   let state = editorReducer(ready("one"), { type: "edit", content: "one two" });
   state = editorReducer(state, { type: "save-start", content: "one two" });
