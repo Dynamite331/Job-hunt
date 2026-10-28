@@ -101,6 +101,7 @@ const USAGE = `Usage:
 // path argument" before check-liveness looked at its own argv.
 let summaryMode = false;
 let selfTestMode = false;
+let noClarificationDraft = false;
 let filePathArg = null;
 let applyMode = false;
 let idArg = null;
@@ -110,7 +111,7 @@ if (isMainModule(import.meta.url)) {
 
   summaryMode = args.includes('--summary');
   selfTestMode = args.includes('--self-test');
-  const noClarificationDraft = args.includes('--no-clarification-draft');
+  noClarificationDraft = args.includes('--no-clarification-draft');
   const fileIdx = args.indexOf('--file');
   // Treat a following recognized flag (e.g. `--file --summary`) the same as a
   // missing value — otherwise it's silently accepted as the path and produces
