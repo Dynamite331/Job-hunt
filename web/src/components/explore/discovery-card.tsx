@@ -100,7 +100,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
         )}
         {offer.matchedKeyword && (
           <span className="text-faint" title="Keyword match — not yet scored. Evaluate to get an A–F fit score.">
-            · matched <span className="text-brand-text/80">{offer.matchedKeyword}</span>
+            · matched <span className="text-brand-text">{offer.matchedKeyword}</span>
           </span>
         )}
         {offer.fit && (
@@ -119,7 +119,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
       </div>
 
       {offer.why && (
-        <p className="flex items-start gap-1.5 text-[12px] leading-snug text-brand-text/80">
+        <p className="flex items-start gap-1.5 text-[12px] leading-snug text-brand-text">
           <Sparkles className="mt-0.5 size-3 shrink-0" />
           {offer.why}
         </p>
@@ -137,7 +137,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
           <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-brand/30 bg-brand-soft/60 px-2.5 py-2 text-xs font-medium text-brand-text">
             <Loader2 className="size-3.5 animate-spin" />
             {statusLabel}
-            <span className="text-brand-text/60">· in pipeline</span>
+            <span className="text-brand-text">· in pipeline</span>
           </div>
         ) : (
           <div className="flex items-center gap-2">
