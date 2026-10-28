@@ -99,7 +99,10 @@ try {
 const webDir = dirname(fileURLToPath(import.meta.url));
 const painterScript = join(webDir, "..", "generate-pdf.mjs");
 if (existsSync(painterScript)) {
+  // Same cwd as the export child (the repo root), so a relative
+  // CAREER_OPS_TRACKER resolves to the same pdf-index.tsv in both.
   const painter = spawn(process.execPath, [painterScript, "--pdf-server"], {
+    cwd: dirname(painterScript),
     detached: true,
     stdio: "ignore",
     windowsHide: true,
