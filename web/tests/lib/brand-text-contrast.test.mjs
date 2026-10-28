@@ -72,6 +72,13 @@ test("the light brand-text token reaches AA (4.5:1) on every light surface", asy
   }
 });
 
+test("an arrow function before className still counts as faded brand text", async () => {
+  const tokens = rootTokens(await readFile(GLOBALS, "utf8"));
+  const source = `<Button onClick={() => save()} className="text-brand-text/60">Save</Button>`;
+  const misses = fadedBrandMisses(source, tokens, "fixture.tsx");
+  assert.ok(misses.some((line) => line.includes("<Button>") && line.includes("text-brand-text/60")), misses.join("\n") || "the arrow tag was skipped");
+});
+
 test("no component colors text with the raw brand fill", async () => {
   const hits = await rawBrandTextUses();
   assert.deepEqual(
@@ -87,7 +94,7 @@ test("no component colors text with the raw brand fill", async () => {
 // checked like a lowercase tag.
 const TEXT_COMPONENTS = ["Link", "Button"];
 const FADED_BRAND_TEXT = new RegExp(
-  String.raw`<((?:[a-z][\w.]*|${TEXT_COMPONENTS.join("|")})(?![\w.]))[^<>]*?(?<![\w-])text-brand-text\/(\d+)`,
+  String.raw`<((?:[a-z][\w.]*|${TEXT_COMPONENTS.join("|")})(?![\w.]))(?:[^<>{}]|\{(?:[^{}]|\{[^{}]*\})*\})*?(?<![\w-])text-brand-text\/(\d+)`,
   "g",
 );
 
