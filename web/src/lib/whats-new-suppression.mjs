@@ -50,12 +50,14 @@
 // with on the server (Explore dedup, inbox reconcile).
 
 import { normalizeUrl } from "./core/url-key.mjs";
+import { unwrapReportUrlToken } from "./core/report-url-token.mjs";
 
 // The core's report-URL rule (merge-tracker.mjs resolveReportUrl,
 // verify-pipeline.mjs extractReportUrlKey): `**URL:**` anywhere on the line,
 // since the documented header can be inline, and `[ \t]*` so an empty header
-// cannot capture the next line. A token normalizeUrl cannot key (`N/A`) reads
-// as unknown.
+// cannot capture the next line. The token is unwrapped before keying, as the
+// core does (an autolink's `<…>`, trailing `,` `.` `;`, an unbalanced `)`). A
+// token normalizeUrl cannot key (`N/A`) reads as unknown.
 const REPORT_URL = /\*\*URL:\*\*[ \t]*(\S+)/;
 
 /**
@@ -102,7 +104,7 @@ function evaluatedPosting(app, readReport) {
   if (fromCell) return fromCell;
   const report = readReport?.(app);
   const match = typeof report === "string" ? REPORT_URL.exec(report) : null;
-  return match ? postingId(match[1]) : null;
+  return match ? postingId(unwrapReportUrlToken(match[1])) : null;
 }
 
 /**

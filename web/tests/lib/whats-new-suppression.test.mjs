@@ -159,6 +159,18 @@ test("an inline report header still yields the posting URL", () => {
   assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_A), true);
 });
 
+test("a wrapped report URL still yields the posting URL", () => {
+  // The core unwraps the `**URL:**` token before keying it (tracker-parse.mjs
+  // unwrapReportUrlToken): an autolink's `<…>` and trailing punctuation. Keyed
+  // raw, `<https://…>` has no key, the posting reads as unknown, and a second
+  // requisition with the same title is hidden again.
+  for (const token of [`<${REQ_A}>`, `<${REQ_A}>,`, `${REQ_A}.`]) {
+    const { keys } = evaluatedWithReports([["Acme", "Staff Engineer", reportWithUrl(token)]]);
+    assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_B), false, `token: ${token}`);
+    assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_A), true, `token: ${token}`);
+  }
+});
+
 test("an unknown report URL falls back to company + role", () => {
   // No report, no `**URL:**` line, a recruiter-sourced `N/A`, an empty header
   // (which must not capture the next line's text): none of these say which
