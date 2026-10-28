@@ -393,12 +393,8 @@ export function findReportFile(n: string): string | null {
   const target = Number(n);
   const root = careerOpsRoot();
   const app = readApplications().find((a) => parseInt(a.n, 10) === target);
-  const linked = firstMarkdownLinkTarget(app?.report);
-  if (linked) {
-    const p = path.resolve(root, "data", linked);
-    // Containment: a hand-edited link must not resolve outside the project.
-    if (p.endsWith(".md") && !isReservedReportFile(p) && containedRealpath(p, root)) return p;
-  }
+  const linked = linkedReportFile(app, root);
+  if (linked) return linked;
   let files: string[];
   try {
     files = fs.readdirSync(path.join(root, "reports"));
@@ -411,6 +407,53 @@ export function findReportFile(n: string): string | null {
   if (!match) return null;
   const p = path.join(root, "reports", match);
   return containedRealpath(p, root) ? p : null;
+}
+
+/** The path a tracker row's own Report link names, or null when the cell has
+ *  no link or the link is not a non-reserved `.md`. Not checked for
+ *  containment: callers do that. */
+function linkedReportPath(app: { report?: string } | undefined, root: string): string | null {
+  const linked = firstMarkdownLinkTarget(app?.report);
+  if (!linked) return null;
+  const p = path.resolve(root, "data", linked);
+  return p.endsWith(".md") && !isReservedReportFile(p) ? p : null;
+}
+
+/** linkedReportPath, kept only when it resolves inside the project. */
+function linkedReportFile(app: { report?: string } | undefined, root: string): string | null {
+  const p = linkedReportPath(app, root);
+  // Containment: a hand-edited link must not resolve outside the project.
+  return p && containedRealpath(p, root) ? p : null;
+}
+
+/** Text of the report a tracker row links to, or null. The What's New
+ *  suppression reads its `**URL:**` (lib/whats-new-suppression.mjs). Link
+ *  only, never findReportFile's number fallback: row and report numbers drift
+ *  apart (#1733), and a guessed report would hand the row another posting's
+ *  URL. Null (no link, or the report is missing) means "URL unknown" there and
+ *  falls back to the company + role match. Any other read failure throws: a
+ *  report that exists but cannot be read is broken, and reading it as unknown
+ *  would hide a second posting with the same title with no signal. */
+export function readLinkedReport(app: { report?: string }): string | null {
+  const root = careerOpsRoot();
+  const file = linkedReportPath(app, root);
+  if (!file) return null;
+  try {
+    // containedRealpath's check, inline: it reads every resolution failure as
+    // "not found", and here only ENOENT may. A reports dir without traversal
+    // permission (EACCES) or a symlink loop (ELOOP) is broken, not absent.
+    if (!fs.realpathSync(file).startsWith(fs.realpathSync(root) + path.sep)) return null;
+    // Reports live in the user's runtime checkout, outside the web build graph.
+    return fs.readFileSync(/* turbopackIgnore: true */ file, "utf8");
+  } catch (err) {
+    // Missing, or deleted since it resolved: unknown.
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    // EISDIR's message names no file, so name it here.
+    throw new Error(
+      `report ${path.relative(root, file)} could not be read: ${(err as Error)?.message ?? "unknown error"}`,
+      { cause: err },
+    );
+  }
 }
 
 /** True containment check: resolves symlinks before comparing, so a link
