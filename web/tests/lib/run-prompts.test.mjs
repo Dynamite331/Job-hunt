@@ -421,15 +421,29 @@ test("buildPrompt: checkout-owned files are anchored to codeRoot, user files sta
   const evaluate = buildPrompt({ kind: "evaluate", ...ARGS, codeRoot });
   assert.match(evaluate, /"\/opt\/career-ops\/modes\/oferta\.md"/);
   const portal = buildPrompt({ kind: "fix-portal", ...ARGS, input: "Acme", codeRoot });
-  assert.match(portal, /node "\/opt\/career-ops\/verify-portals\.mjs" --add "Acme"/);
+  assert.match(portal, /node '\/opt\/career-ops\/verify-portals\.mjs' --add "Acme"/);
   // user-layer files are not the checkout's
   assert.ok(!/opt\/career-ops\/(cv\.md|modes\/_profile\.md)/.test(pdf + cover + evaluate));
 });
 
-test("buildPrompt: a codeRoot with shell metacharacters is not interpolated", () => {
-  const portal = buildPrompt({ kind: "fix-portal", ...ARGS, input: "Acme", codeRoot: "/opt/$(id)" });
-  assert.ok(!portal.includes("$(id)"));
-  assert.match(portal, /node verify-portals\.mjs --add "Acme"/);
+test("buildPrompt: a codeRoot with unusual characters stays absolute, quoted per use", () => {
+  // Valid directory names (accents, parentheses, $, a quote) must not drop the worker
+  // back to the data root: the path is data in instructions and escaped for the shell.
+  const codeRoot = "/srv/José/it's ($HOME)/career-ops";
+  const pdf = buildPrompt({ kind: "pdf", ...ARGS, codeRoot });
+  assert.ok(pdf.includes(JSON.stringify(`${codeRoot}/modes/pdf.md`)), "instruction paths are JSON-quoted data");
+  const portal = buildPrompt({ kind: "fix-portal", ...ARGS, input: "Acme", codeRoot });
+  assert.ok(
+    portal.includes(`node '/srv/José/it'\\''s ($HOME)/career-ops/verify-portals.mjs' --add "Acme"`),
+    "the shell command single-quotes the path and escapes the embedded quote",
+  );
+});
+
+test("buildPrompt: a codeRoot that is not a plain path keeps the relative form", () => {
+  for (const bad of ["/opt/x/../etc", "/opt/line\nbreak"]) {
+    const portal = buildPrompt({ kind: "fix-portal", ...ARGS, input: "Acme", codeRoot: bad });
+    assert.match(portal, /node verify-portals\.mjs --add "Acme"/);
+  }
 });
 
 test("buildPrompt: the pdf prompt anchors the template to the checkout when given its root", () => {

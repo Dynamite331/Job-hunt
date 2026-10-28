@@ -112,14 +112,29 @@ function safeCvTemplate(value) {
  * path is already right. User-layer files (cv.md, modes/_profile.md, reports/) are
  * deliberately NOT routed through here: they live under the data root.
  *
- * The result lands in an agent's instructions, and for verify-portals.mjs in a shell
- * command, so a root with characters beyond ordinary path ones keeps the relative
- * path rather than carrying them in.
+ * The path is kept whatever characters the checkout lives under (`é`, `(`, `$`,
+ * spaces): dropping to the relative form would send the worker to the data root,
+ * which is exactly the failure this exists to prevent. It is quoted as instruction
+ * DATA with JSON.stringify; the one place it also reaches a shell command
+ * (verify-portals.mjs) is escaped separately by shellFromCheckout(). Only a root
+ * holding control characters or a ".." segment falls back, since no real checkout
+ * path has either.
  */
-const SAFE_ROOT_RE = /^[A-Za-z0-9_ ./:\\+@~-]+$/;
+function checkoutPath(rel, codeRoot) {
+  if (typeof codeRoot !== "string" || !codeRoot) return null;
+  if (/[\u0000-\u001f\u007f]/.test(codeRoot) || codeRoot.split(/[\\/]/).includes("..")) return null;
+  return `${codeRoot.replace(/[\\/]+$/, "")}/${rel}`;
+}
+
 function fromCheckout(rel, codeRoot) {
-  if (typeof codeRoot !== "string" || !codeRoot || !SAFE_ROOT_RE.test(codeRoot) || codeRoot.includes("..")) return rel;
-  return JSON.stringify(`${codeRoot.replace(/[\\/]+$/, "")}/${rel}`);
+  const abs = checkoutPath(rel, codeRoot);
+  return abs === null ? rel : JSON.stringify(abs);
+}
+
+/** Same path, POSIX single-quoted for a shell command: nothing inside expands. */
+function shellFromCheckout(rel, codeRoot) {
+  const abs = checkoutPath(rel, codeRoot);
+  return abs === null ? rel : `'${abs.replace(/'/g, `'\\''`)}'`;
 }
 
 const templateFile = (value, codeRoot) => fromCheckout(safeCvTemplate(value), codeRoot);
@@ -211,9 +226,9 @@ End with EXACTLY one final line: VERDICT: {5 if a complete draft was written, el
   }
   if (kind === "fix-portal") {
     return `A company's job-portal ATS slug is BROKEN — career-ops can no longer scan it, so it silently disappears from every future scan. Repair it (headless, on the user's machine):
-1. Run \`node ${fromCheckout("verify-portals.mjs", codeRoot)} --add "${input}"\` — it probes Greenhouse/Ashby/Lever for the company's correct ATS slug and prints the suggested ats + slug.
+1. Run \`node ${shellFromCheckout("verify-portals.mjs", codeRoot)} --add "${input}"\` — it probes Greenhouse/Ashby/Lever for the company's correct ATS slug and prints the suggested ats + slug.
 2. Open portals.yml, find the "${input}" entry under tracked_companies, and update its careers_url (and any api/slug field) to the suggested WORKING ATS URL. Change ONLY this one company; preserve all other YAML structure, comments and formatting exactly.
-3. Re-run \`node ${fromCheckout("verify-portals.mjs", codeRoot)}\` and confirm "${input}" now shows ✅ live (not ❌).
+3. Re-run \`node ${shellFromCheckout("verify-portals.mjs", codeRoot)}\` and confirm "${input}" now shows ✅ live (not ❌).
 If NO slug variant resolves, say so clearly and leave portals.yml unchanged. Never touch any other company. This is a config repair: do not submit, send, or click Apply anywhere, and edit no file other than portals.yml.
 
 End with EXACTLY one final line: VERDICT: {5 if now live, else 1}/5 — {what you changed, ≤12 words}`;
