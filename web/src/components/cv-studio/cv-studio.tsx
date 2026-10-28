@@ -21,6 +21,7 @@ const REASONS: Record<string, { title: string; body: string }> = {
 };
 
 const STALE = "This CV was regenerated in another tab. Reload the Studio.";
+const KEEPALIVE_BYTES = 60_000;
 const SAVE_ERRORS: Record<string, string> = { stale: STALE, busy: "This CV is already being saved. Wait for that save to finish." };
 
 export function CvStudio({ n }: { n: string }) {
@@ -65,28 +66,81 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
 
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const send = useCallback(
-    (method: "PUT" | "POST", body: object) => {
-      const sent = queue.current.then(() => fetch(`/api/cv-studio/${encodeURIComponent(n)}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+    (method: "PUT" | "POST", body: object, keepalive = false) => {
+      const payload = JSON.stringify(body);
+      const bytes = new TextEncoder().encode(payload).length;
+      const sent = queue.current.then(() =>
+        fetch(`/api/cv-studio/${encodeURIComponent(n)}`, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: keepalive && bytes < KEEPALIVE_BYTES,
+        }),
+      );
       queue.current = sent.catch(() => {});
       return sent;
     },
     [n],
   );
 
-  const first = useRef(true);
+  const savedJsonRef = useRef(JSON.stringify(data.edits));
+  const savingJsonRef = useRef<string | null>(null);
+  const editsRef = useRef(edits);
+  editsRef.current = edits;
+  const [, rerender] = useState(0);
+  const showStatus = useCallback(() => rerender((n) => n + 1), []);
+
+  const putEdits = useCallback(
+    (payload: StudioEdits, keepalive: boolean) => {
+      const serialized = JSON.stringify(payload);
+      if (serialized === savedJsonRef.current || serialized === savingJsonRef.current) return;
+      savingJsonRef.current = serialized;
+      showStatus();
+      send("PUT", { edits: payload }, keepalive)
+        .then((r) => {
+          if (savingJsonRef.current !== serialized) return;
+          savingJsonRef.current = null;
+          if (!r.ok) {
+            setAutosaveError(r.status === 409 ? STALE : "Autosave failed. Your latest changes are not saved yet.");
+            showStatus();
+            return;
+          }
+          const latest = JSON.stringify(editsRef.current);
+          setAutosaveError(null);
+          if (latest === serialized || savedJsonRef.current !== latest) {
+            savedJsonRef.current = serialized;
+            if (latest !== serialized) putEdits(editsRef.current, keepalive);
+          }
+          showStatus();
+        })
+        .catch(() => {
+          if (savingJsonRef.current === serialized) savingJsonRef.current = null;
+          setAutosaveError("Autosave failed. Is the dashboard still running?");
+          showStatus();
+        });
+    },
+    [showStatus, send],
+  );
+
   useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
+    const flush = () => putEdits(editsRef.current, true);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [putEdits]);
+
+  useEffect(() => {
+    const serialized = JSON.stringify(edits);
+    if (serialized === savedJsonRef.current || serialized === savingJsonRef.current) return;
     setSave((s) => (s.kind === "saved" ? { kind: "idle" } : s));
-    const t = setTimeout(() => {
-      send("PUT", { edits })
-        .then((r) => setAutosaveError(r.ok ? null : r.status === 409 ? STALE : "Autosave failed. Your latest changes are not saved yet."))
-        .catch(() => setAutosaveError("Autosave failed. Is the dashboard still running?"));
-    }, 500);
-    return () => clearTimeout(t);
-  }, [edits, send]);
+    const timer = setTimeout(() => putEdits(editsRef.current, false), 500);
+    return () => clearTimeout(timer);
+  }, [edits, putEdits]);
+
+  const editsJson = JSON.stringify(edits);
+  const editStatus = savingJsonRef.current === editsJson ? "Saving" : editsJson !== savedJsonRef.current ? "Unsaved" : "Saved";
 
   const saveForApply = useCallback(async () => {
     setSave({ kind: "saving" });
@@ -117,6 +171,7 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
           <button onClick={() => dispatch({ type: "reset" })} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-brand">
             <RotateCcw className="size-3.5" /> Reset
           </button>
+          <p role="status" className="text-xs text-muted">{editStatus}</p>
           <button
             onClick={saveForApply}
             disabled={save.kind === "saving"}
