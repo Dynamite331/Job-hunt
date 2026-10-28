@@ -619,6 +619,9 @@ export function workdayDedupKey(job) {
 // Anchored, and `Locations?` singular-tolerant: it must not fire on a real
 // place that merely contains a digit and the word ("100 Locations Plaza").
 const MULTI_LOCATION_PLACEHOLDER_RE = /^\s*\d+\s+locations?\s*$/i;
+// The " · Remote" withFullyRemote appends. Both the placeholder check and the
+// detail enrichment read it with this one pattern so they agree on spacing.
+const REMOTE_SUFFIX_RE = /\s*·\s*remote\s*$/i;
 
 /**
  * True when a Workday list location is the count-placeholder rather than a place.
@@ -631,7 +634,7 @@ export function isMultiLocationPlaceholder(location) {
   if (typeof location !== 'string') return false;
   // A fully-remote count is still a count. The marker is appended before this
   // check; leave it on and the detail GET never runs.
-  const bare = location.replace(/\s*·\s*remote\s*$/i, '');
+  const bare = location.replace(REMOTE_SUFFIX_RE, '');
   return MULTI_LOCATION_PLACEHOLDER_RE.test(bare);
 }
 
@@ -1198,7 +1201,7 @@ export default {
         if (places === '') { failed++; continue; }
         // The list row may already say "5 Locations · Remote". Replacing it
         // with the city would drop the only signal a Remote allow-list sees.
-        const wasFullyRemote = typeof job.location === 'string' && /\s·\s*Remote\s*$/i.test(job.location);
+        const wasFullyRemote = typeof job.location === 'string' && REMOTE_SUFFIX_RE.test(job.location);
         job.location = places;
         if (wasFullyRemote && !/remote/i.test(places)) job.location = `${places} · Remote`;
         resolved++;

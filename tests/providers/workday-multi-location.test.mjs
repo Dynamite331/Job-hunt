@@ -857,3 +857,23 @@ for (const [label, detailImpl] of [
     fail(`resolved fully-remote placeholder was ${JSON.stringify(resolved?.location)}`);
   }
 }
+
+// A count the list already marks remote with no space before the separator is
+// still a placeholder, and the resolved city keeps the marker.
+{
+  const tight = await workday.fetch(ENTRY, mkCtx(async (url) => {
+    if (url.endsWith('/jobs')) {
+      return {
+        total: 1,
+        jobPostings: [{ title: 'Ops Lead', externalPath: '/job/Bend-OR/Ops-Lead_R10', postedOn: 'Posted Today', locationsText: '5 Locations· Remote' }],
+      };
+    }
+    if (url.endsWith('/job/Bend-OR/Ops-Lead_R10')) {
+      return { jobPostingInfo: { location: 'Bend, OR', additionalLocations: [], startDate: '2026-09-04' } };
+    }
+    throw new Error(`unexpected url ${url}`);
+  }));
+  const job = tight.find((j) => j.url.endsWith('/job/Bend-OR/Ops-Lead_R10'));
+  if (job?.location === 'Bend, OR · Remote') pass('workday.fetch() keeps Remote on "5 Locations· Remote" after it resolves');
+  else fail(`"5 Locations· Remote" resolved to ${JSON.stringify(job?.location)}`);
+}
