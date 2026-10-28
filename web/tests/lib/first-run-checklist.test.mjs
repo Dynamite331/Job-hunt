@@ -76,6 +76,12 @@ test("a range that starts before 2000 is a role", () => {
   assert.equal(cvReadiness("Floor lead, Northwind Market\n1996 - present").scoreable, true);
 });
 
+test("a range with months on both ends is a role", () => {
+  for (const range of ["Jan 2020 – Dec 2023", "January 2020 - March 2023", "Sept. 2019 — Present", "01/2020 - 12/2023"]) {
+    assert.equal(cvReadiness(`Floor lead, Northwind Market\n${range}`).scoreable, true, range);
+  }
+});
+
 test("a markdown rule under experience is not a role", () => {
   for (const rule of ["---", "***", "___", "- - -"]) {
     assert.equal(cvReadiness(`## Experience\n${rule}\n## Skills\nScheduling`).scoreable, false, rule);
