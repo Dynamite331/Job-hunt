@@ -16,7 +16,7 @@ const MESSAGES = {
   refused: "The AI CLI could not be started with read-only access, so nothing ran.",
   failed: "The AI CLI did not finish. Check that it is signed in, then try again.",
   "no-answer": "The AI CLI replied without a usable bullet. Try a different instruction.",
-  unsupported: "The rewrite was discarded because it adds claims this bullet does not support:",
+  unsupported: "The rewrite was discarded because it adds wording this bullet does not support:",
 } as const;
 
 export async function POST(req: Request, { params }: RouteContext) {

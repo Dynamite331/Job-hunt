@@ -147,12 +147,20 @@ type VerifyCvFacts = {
   auditClaims: (text: string, sourceText: string) => Parameters<typeof unsupportedClaims>[1];
 };
 
-/** The claims in a rewrite that cv.md and article-digest.md do not support, and the metrics its own bullet does not carry. */
+type CvVoice = {
+  voiceIssues: (generated: string, source: string) => { kind: string; value: string }[];
+};
+
+/** Claims cv.md does not support, metrics this bullet does not carry, and stock wording the bullet does not already contain. */
 export async function unsupportedRewriteClaims(text: string, bulletText: string): Promise<string[]> {
   const root = careerOpsRoot();
   const { verifyFacts, auditClaims } = await coreModule<VerifyCvFacts>("verify-cv-facts");
+  const { voiceIssues } = await coreModule<CvVoice>("cv-voice");
   const cv = verifyFacts(text, { sourcePaths: [path.join(root, "cv.md"), path.join(root, "article-digest.md")], configPath: path.join(root, "config", "cv-facts.json") });
-  return unsupportedClaims(cv, auditClaims(text, bulletText));
+  const tells = voiceIssues(text, bulletText)
+    .filter((issue) => issue.kind !== "invented-number")
+    .map((issue) => issue.value);
+  return [...new Set([...unsupportedClaims(cv, auditClaims(text, bulletText)), ...tells])];
 }
 
 export type RenderOutcome = { ok: true; pdf: string; indexed: boolean; warnings: string[] } | { ok: false; error: string };
