@@ -457,18 +457,25 @@ export function findApplicationByUrl(rawUrl: string): Application | null {
   if (!rawUrl || typeof rawUrl !== "string") return null;
   const clean = (u: string) => {
     try {
-      const normalized = normalizeToApplicationUrl(u);
-      return normalized.split("?")[0].split("#")[0].replace(/\/+$/, "").toLowerCase();
+      const normalized = normalizeToApplicationUrl(u.trim());
+      const hasProto = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalized);
+      const parsed = new URL(hasProto ? normalized : `https://${normalized}`);
+      return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${parsed.pathname.replace(/\/+$/, "")}`;
     } catch {
-      return u.split("?")[0].split("#")[0].replace(/\/+$/, "").toLowerCase();
+      return u.trim().split("?")[0].split("#")[0].replace(/\/+$/, "");
     }
   };
   const target = clean(rawUrl);
   if (!target) return null;
 
   for (const app of readApplications()) {
-    const rawTarget = firstMarkdownLinkTarget(app.url) || app.url || firstMarkdownLinkTarget(app.applyLink) || app.applyLink;
-    if (rawTarget && clean(rawTarget) === target) return app;
+    const candidates = [
+      firstMarkdownLinkTarget(app.url),
+      app.url,
+      firstMarkdownLinkTarget(app.applyLink),
+      app.applyLink,
+    ].filter((c): c is string => typeof c === "string" && c.length > 0);
+    if (candidates.some((c) => clean(c) === target)) return app;
   }
   return null;
 }
