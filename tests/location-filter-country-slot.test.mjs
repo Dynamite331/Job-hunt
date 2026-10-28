@@ -18,6 +18,17 @@ test('a trailing ISO country code is not read as a US state', () => {
   }
 });
 
+test('each place in a joined location gets its own country-code check', () => {
+  for (const location of [
+    'Bengaluru, Karnataka, IN; Remote',
+    'Toronto, ON, CA · Vancouver, BC, CA',
+    'Berlin, BE, DE; Bengaluru, KA, IN',
+  ]) {
+    assert.equal(filter(location), false, `${location} stays blocked`);
+  }
+  assert.equal(filter('Toronto, ON, CA · Austin, TX, US'), true, 'a US place in the list still passes');
+});
+
 test('US states still rescue City, ST and City, ST, Country forms', () => {
   for (const location of ['Dublin, OH', 'Austin, TX, US', 'Columbus, OH, USA', 'Portland, OR, United States']) {
     assert.equal(filter(location), true, `${location} passes`);
