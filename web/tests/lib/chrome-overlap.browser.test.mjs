@@ -29,7 +29,7 @@ test("version pill and Ask stay out of the main column at 1440x900", {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${origin.origin}/`, { waitUntil: "domcontentloaded" });
-  const ask = page.getByRole("button", { name: "Open assistant", exact: true });
+  const ask = page.getByRole("button", { name: "Ask the assistant", exact: true });
   const report = page.getByRole("button", { name: "Report a bug" });
   await ask.waitFor();
   await report.waitFor();
@@ -37,7 +37,7 @@ test("version pill and Ask stay out of the main column at 1440x900", {
   const main = await page.locator("main").boundingBox();
   const askBox = await ask.boundingBox();
   const pillBox = await report.locator("xpath=..").boundingBox();
-  const theme = await page.getByRole("complementary").getByRole("button", { name: "Dark mode" }).boundingBox();
+  const theme = await page.getByRole("complementary").filter({ has: page.getByRole("navigation") }).getByRole("button", { name: "Dark mode" }).boundingBox();
   assert.ok(main && askBox && pillBox && theme);
 
   assert.equal(overlapSize(pillBox, main), null, "version pill intersects main");
@@ -58,6 +58,6 @@ test("version pill and Ask stay out of the main column at 1440x900", {
     };
   });
   assert.equal(hits.left.includes("Report a bug"), false, `bottom of the main column hit ${hits.left}`);
-  assert.equal(hits.right.includes("Open assistant"), false, `bottom-right of the viewport hit ${hits.right}`);
+  assert.equal(hits.right.includes("Ask the assistant"), false, `bottom-right of the viewport hit ${hits.right}`);
   assert.deepEqual(errors, []);
 });
