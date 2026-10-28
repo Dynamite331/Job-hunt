@@ -497,7 +497,7 @@ const USPS_STATES = Object.freeze([
 function compileUsStateAbbrev(abbr) {
   const escaped = abbr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(`(?:,\\s*${escaped}(?![\\p{L}\\p{M}\\p{N}])|(?:^|[^\\p{L}\\p{M}\\p{N}])${escaped}[^\\p{L}\\p{M}\\p{N}]*$)`, 'u');
-  return (lower) => re.test(withoutCountryCodeSlot(lower));
+  return (lower) => placesWithoutCountryCode(lower).some((place) => re.test(place));
 }
 
 // "City, Region, CC" ends in an ISO country code, and several of those are
@@ -507,14 +507,15 @@ function compileUsStateAbbrev(abbr) {
 // a state. "Austin, TX, US" still keeps TX. So does "Austin TX, US", where the
 // state sits in the city part. Providers join several places with "; "
 // (Lever) or " · " (Jobvite), so each place gets its own check:
-// "Bengaluru, Karnataka, IN; Remote" must still drop IN.
-function withoutCountryCodeSlot(lower) {
-  return lower.split(/([;·])/).map((place) => {
+// "Bengaluru, Karnataka, IN; Remote" must still drop IN, and the TX in
+// "Austin TX · Toronto, ON, CA" counts even though it is not at the end.
+function placesWithoutCountryCode(lower) {
+  return lower.split(/[;·]/).map((place) => {
     const parts = place.split(',');
     if (parts.length < 2 || !/^\s*\p{L}{2}\s*$/u.test(parts.at(-1))) return place;
     if (parts.length === 2 && !/(?:^|[^\p{L}\p{M}\p{N}])\p{L}{2}\s*$/u.test(parts[0])) return place;
     return parts.slice(0, -1).join(',');
-  }).join('');
+  });
 }
 
 const US_STATE_ALWAYS_ALLOW_MATCHERS = USPS_STATES.flatMap(([name, abbr]) => [
