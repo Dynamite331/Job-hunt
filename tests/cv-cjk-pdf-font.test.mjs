@@ -121,17 +121,30 @@ const LOCALE_STACK_FILES = [
   'templates/cv-template.zh-minimal.html',
 ];
 const CJK_FACE = /Hiragino|PingFang|Noto (?:Sans|Serif) CJK|YaHei|JhengHei|Yu Gothic|Yu Mincho|Source Han|Malgun|Apple SD Gothic/;
+
+function arialPrecedesCjk(decl) {
+  const faces = decl.split(',').map((s) => s.trim());
+  const cjkAt = faces.findIndex((face) => CJK_FACE.test(face));
+  if (cjkAt === -1) return false;
+  const arialAt = faces.findIndex((face) => face.includes('Arial Unicode MS') || face.startsWith('var(--font-family)'));
+  return arialAt !== -1 && arialAt < cjkAt;
+}
+
+if (arialPrecedesCjk("'PingFang SC', 'Arial Unicode MS', sans-serif")) {
+  fail('a CJK face listed before Arial Unicode MS must fail the order check');
+} else {
+  pass('a CJK face listed before Arial Unicode MS fails the order check');
+}
+
 for (const rel of LOCALE_STACK_FILES) {
   const css = readFileSync(join(ROOT, rel), 'utf8');
-  const tokenHasHan = [...css.matchAll(/--font-family:\s*([^;]+);/g)].some((m) => m[1].includes('Arial Unicode MS'));
   const localeStacks = [...css.matchAll(/[^-]font-family:\s*([^;{}]+);/g)]
     .map((m) => m[1].replace(/\s+/g, ' ').trim())
     .filter((decl) => CJK_FACE.test(decl));
-  const missing = localeStacks.filter((decl) => !decl.includes('Arial Unicode MS')
-    && !(tokenHasHan && decl.startsWith('var(--font-family),')));
+  const missing = localeStacks.filter((decl) => !arialPrecedesCjk(decl));
   if (localeStacks.length === 0) fail(`${rel} has no CJK locale font-family rules to check`);
-  else if (missing.length === 0) pass(`${rel} names Arial Unicode MS in its ${localeStacks.length} CJK locale stacks`);
-  else fail(`${rel} CJK locale stacks without Arial Unicode MS: ${missing.join(' | ')}`);
+  else if (missing.length === 0) pass(`${rel} lists Arial Unicode MS before the CJK face in its ${localeStacks.length} locale stacks`);
+  else fail(`${rel} CJK locale stacks where Arial Unicode MS does not come first: ${missing.join(' | ')}`);
 }
 const zhBody = readFileSync(join(ROOT, 'templates/cv-template.zh-minimal.html'), 'utf8')
   .match(/html\[lang="zh"\][^{]*\{[^}]*?font-family:\s*([^;]+);/)?.[1].replace(/\s+/g, ' ') ?? '';
