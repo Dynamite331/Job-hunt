@@ -6,6 +6,7 @@ import path from "node:path";
 
 const company = "Northwind" + "Industrial".repeat(12);
 const link = "jane.example.com/" + "portfolio".repeat(40);
+const longPeriod = "September 2021 - August 2025, renewed each quarter" + " and renewed again".repeat(14);
 const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
 body { margin: 0; font-family: "Liberation Sans", "Helvetica Neue", Arial, sans-serif; font-size: 11px; }
@@ -35,6 +36,13 @@ a { white-space: nowrap; }
         <div class="job-period">September 2025 - Present</div>
       </div>
       <ul><li>Kept a placeholder queue for a fictional retailer.</li></ul>
+    </div>
+    <div class="job">
+      <div class="job-header">
+        <span class="job-company">Example Co</span>
+        <div class="job-period">${longPeriod}</div>
+      </div>
+      <ul><li>Ran a placeholder help desk for a fictional store.</li></ul>
     </div>
   </div>
 </div>

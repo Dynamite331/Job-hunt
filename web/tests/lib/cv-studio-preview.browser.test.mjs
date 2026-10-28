@@ -32,6 +32,7 @@ test("CV Studio live preview bolds markdown and keeps the date and contact line 
       return { left: rect.left, right: rect.right };
     };
     const date = span(doc.querySelector(".job-period").firstChild);
+    const longDate = doc.querySelectorAll(".job-period")[1].getBoundingClientRect();
     const link = doc.querySelector('.contact-row a[href*="jane.example.com"]');
     const last = link.firstChild;
     const end = doc.createRange();
@@ -44,6 +45,7 @@ test("CV Studio live preview bolds markdown and keeps the date and contact line 
       asterisks: (doc.body.innerText.match(/\*\*/g) || []).length,
       strong: [...doc.querySelectorAll("strong")].map((el) => el.textContent),
       date,
+      longDate: { left: longDate.left, right: longDate.right, height: longDate.height },
       linkEnd,
       cw,
       sw: doc.documentElement.scrollWidth,
@@ -58,6 +60,8 @@ test("CV Studio live preview bolds markdown and keeps the date and contact line 
   assert.ok(fit.strong.includes("~2,000 actionable items"));
   assert.ok(fit.date.left >= -1, `date starts on the page (${fit.date.left})`);
   assert.ok(fit.date.right <= fit.cw + 1, `date ends on the page (${fit.date.right} vs ${fit.cw})`);
+  assert.ok(fit.longDate.left >= -1 && fit.longDate.right <= fit.cw + 1, `a date wider than the page wraps on it (${fit.longDate.left}..${fit.longDate.right} vs ${fit.cw})`);
+  assert.ok(fit.longDate.height > 20, `the long date takes more than one line (${fit.longDate.height}px)`);
   assert.ok(fit.linkEnd <= fit.cw + 1, `contact link ends on the page (${fit.linkEnd} vs ${fit.cw})`);
   assert.ok(fit.sw <= fit.cw + 1, `preview page has no horizontal overflow (${fit.sw} vs ${fit.cw})`);
   assert.equal(fit.outerScroll, false);

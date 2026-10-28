@@ -1,6 +1,7 @@
 const FIT = `.job-header, .edu-header, .contact-row, .cert-table, .award-table { min-width: 0; max-width: 100%; }
+.job-header, .edu-header { flex-wrap: wrap; }
 .job-company, .edu-title, .project-title, .skill-category { min-width: 0; overflow-wrap: anywhere; }
-.job-period, .edu-year { flex-shrink: 0; max-width: 100%; overflow-wrap: anywhere; }
+.job-period, .edu-year { flex-shrink: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .contact-row > * { max-width: 100%; min-width: 0; }
 .summary-text, li { overflow-wrap: anywhere; }
 a { white-space: normal; overflow-wrap: anywhere; }
