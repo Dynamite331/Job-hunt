@@ -38,6 +38,7 @@ test('each place in a joined location gets its own country-code check', () => {
   assert.equal(filter('Dublin, OH'), true, 'City, ST is not a country slot');
   assert.equal(filter('LA, CA'), true, 'two state codes are a city and a state');
   assert.equal(filter('LA, CA · Toronto, Canada'), true, 'a US city and state still passes beside a blocked place');
+  assert.equal(filter('Brooklyn, NY, NY · Toronto, Canada'), true, 'a state code written twice is still a state');
 });
 
 test('US states still rescue City, ST and City, ST, Country forms', () => {
