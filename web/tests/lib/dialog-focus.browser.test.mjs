@@ -57,9 +57,9 @@ test("Modal dialogs take focus, trap Tab, close on Escape and return focus", { s
 
   const row = () => page.locator("tbody tr", { hasText: "Fixture Beta" });
   await t.test("Log follow-up", () =>
-    assertModalKeyboard("/followups", () => row().getByRole("button", { name: "Log", exact: true }), /Log follow-up.*Fixture Beta/));
+    assertModalKeyboard("/followups", () => row().getByRole("button", { name: "Log follow-up for Fixture Beta", exact: true }), /Log follow-up.*Fixture Beta/));
   await t.test("Next follow-up date", () =>
-    assertModalKeyboard("/followups", () => row().getByRole("button", { name: /next follow-up date for Fixture Beta/ }), /Pin next follow-up.*Fixture Beta/));
+    assertModalKeyboard("/followups", () => row().getByRole("button", { name: "Next date for Fixture Beta", exact: true }), /Pin next follow-up.*Fixture Beta/));
   await t.test("Report a bug", () =>
     assertModalKeyboard("/", () => page.getByRole("button", { name: "Report a bug", exact: true }), /Report a bug/));
   assert.deepEqual(unexpected, []);
