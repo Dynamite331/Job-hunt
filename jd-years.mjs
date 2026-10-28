@@ -495,13 +495,10 @@ export async function fetchJdText(url, { boardCache, ctx = makeHttpCtx() } = {})
   };
   let json;
   if (resolved.ats === 'ashby' && boardCache) {
+    // A failure is cached too: get() already retried, so asking again for
+    // every other posting on a down board would only repeat that backoff.
     if (!boardCache.has(apiUrl)) boardCache.set(apiUrl, get());
-    try {
-      json = await boardCache.get(apiUrl);
-    } catch (err) {
-      boardCache.delete(apiUrl);
-      throw err;
-    }
+    json = await boardCache.get(apiUrl);
   } else {
     json = await get();
   }

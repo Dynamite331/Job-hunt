@@ -18,7 +18,7 @@ import {
   applyExperienceFilter,
   fetchJdText,
 } from '../jd-years.mjs';
-import { formatPipelineOffer } from '../scan.mjs';
+import { formatPipelineOffer, loadCandidateYears } from '../scan.mjs';
 import { extractLabels } from '../sync-batch-input.mjs';
 
 const ok = async (name, fn) => {
@@ -250,6 +250,28 @@ await ok('on with profile years and defaults (action defaults to label)', () => 
     { enabled: true, years: 3, stretchYears: 0, action: 'label', concurrency: 2 });
 });
 
+await ok('profile years: absent is silent, a non-number or unreadable profile says so', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(join(tmpdir(), 'jd-years-profile-'));
+  const warned = [];
+  const realWarn = console.warn;
+  console.warn = (msg) => warned.push(String(msg));
+  try {
+    const at = (name, text) => { const f = join(dir, name); writeFileSync(f, text); return f; };
+    assert.strictEqual(loadCandidateYears(at('ok.yml', 'candidate:\n  years_of_experience: 4.5\n')), 4.5);
+    assert.strictEqual(loadCandidateYears(at('absent.yml', 'candidate:\n  full_name: x\n')), undefined);
+    assert.deepStrictEqual(warned, []);
+    assert.strictEqual(loadCandidateYears(at('quoted.yml', 'candidate:\n  years_of_experience: "four"\n')), undefined);
+    assert.match(warned.join('\n'), /years_of_experience.*must be a number.*"four"/);
+    assert.strictEqual(loadCandidateYears(at('broken.yml', 'candidate:\n\tyears: [\n')), undefined);
+    assert.match(warned.at(-1) ?? '', /could not read/);
+  } finally {
+    console.warn = realWarn;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 await ok('on without any years stays off and says why', () => {
   const r = resolveExperienceFilter({ enabled: true }, undefined);
   assert.strictEqual(r.enabled, false);
@@ -346,7 +368,7 @@ await ok('Greenhouse asks for the content and returns the JD text', async () => 
   assert.match(String(text), /4\+ years of experience/);
 });
 
-await ok('Ashby reads the board once for every posting on it, and retries a failed board', async () => {
+await ok('Ashby reads the board once for every posting on it, and does not re-read a failed board', async () => {
   const api = 'https://api.ashbyhq.com/posting-api/job-board/acme';
   const board = { jobs: [
     { id: 'aaaaaaaa-0000-0000-0000-000000000001', title: 'A', descriptionPlain: '3+ years of experience' },
@@ -363,7 +385,11 @@ await ok('Ashby reads the board once for every posting on it, and retries a fail
   const failing = new Map();
   const bad = stubCtx({ [api]: new Error('gone') });
   await assert.rejects(fetchJdText('https://jobs.ashbyhq.com/acme/aaaaaaaa-0000-0000-0000-000000000001', { ctx: bad.ctx, boardCache: failing }));
-  assert.strictEqual(failing.size, 0, 'a failed board is not cached');
+  const afterFirst = bad.calls.length;
+  // A board that failed after its retries stays failed for the run: every
+  // other posting on it reads `unread` (kept) without hitting it again.
+  await assert.rejects(fetchJdText('https://jobs.ashbyhq.com/acme/aaaaaaaa-0000-0000-0000-000000000002', { ctx: bad.ctx, boardCache: failing }));
+  assert.strictEqual(bad.calls.length, afterFirst, 'a failed board is not requested again');
 });
 
 await ok('a host with no public JD API makes no request', async () => {

@@ -1286,17 +1286,24 @@ export function loadCandidateCountry(profilePath = PROFILE_PATH) {
 }
 
 // config/profile.yml `candidate.years_of_experience`, the candidate's side of
-// experience_filter. Anything but a number reads as unset (undefined), and
-// resolveExperienceFilter then keeps the filter off and says why.
+// experience_filter. Unset reads as undefined, and resolveExperienceFilter then
+// keeps the filter off and says why. A value that is set but not a number, or
+// a profile that does not parse, is named here: "no years are set" would send
+// the user looking for a key they already wrote.
 export function loadCandidateYears(profilePath = PROFILE_PATH) {
   if (!existsSync(profilePath)) return undefined;
+  let raw;
   try {
-    const raw = loadYaml(readFileSync(profilePath, 'utf-8')) || {};
-    const years = raw?.candidate?.years_of_experience;
-    return typeof years === 'number' && Number.isFinite(years) ? years : undefined;
-  } catch {
+    raw = loadYaml(readFileSync(profilePath, 'utf-8')) || {};
+  } catch (err) {
+    console.warn(`⚠️  experience_filter could not read ${profilePath}: ${String(err?.message ?? err).split('\n')[0]}`);
     return undefined;
   }
+  const years = raw?.candidate?.years_of_experience;
+  if (years === undefined || years === null) return undefined;
+  if (typeof years === 'number' && Number.isFinite(years)) return years;
+  console.warn(`⚠️  candidate.years_of_experience in ${profilePath} must be a number, got ${JSON.stringify(years)}`);
+  return undefined;
 }
 
 export function loadReApplyWindows(profilePath = PROFILE_PATH) {
@@ -4190,7 +4197,13 @@ async function main() {
   // after every other cut, so it costs at most one JD request per posting
   // that would otherwise reach pipeline.md. Independent of skip_tiers: that
   // reads the title, this reads the JD body.
-  const experienceFilter = resolveExperienceFilter(config.experience_filter, loadCandidateYears());
+  // The profile is read only when an enabled block needs its years, so a
+  // profile problem is never reported for a filter that is off.
+  const experienceBlock = config.experience_filter;
+  const needsProfileYears = experienceBlock !== null && typeof experienceBlock === 'object'
+    && !Array.isArray(experienceBlock) && (experienceBlock.enabled === undefined || experienceBlock.enabled === true)
+    && experienceBlock.years == null;
+  const experienceFilter = resolveExperienceFilter(experienceBlock, needsProfileYears ? loadCandidateYears() : undefined);
   if (!experienceFilter.enabled && experienceFilter.reason) console.warn(`⚠️  ${experienceFilter.reason}`);
 
   // 3. Resolve a provider for each enabled company / board
