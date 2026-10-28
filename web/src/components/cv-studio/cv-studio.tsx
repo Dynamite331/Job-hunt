@@ -2,17 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, FileText, Loader2, RotateCcw } from "lucide-react";
+import { ArrowLeft, Check, FileText, Loader2, RotateCcw, Undo2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { arrange, renderBlocks, type BlockTree } from "@/lib/cv-studio/html-blocks.mjs";
-import { emptyEdits, resolveStudio, studioReducer, type StudioAction, type StudioDoc, type StudioEdits } from "@/lib/cv-studio/studio.mjs";
+import { applyRecordedEdit, emptyEdits, resolveStudio, studioReducer, type StudioAction, type StudioDoc, type StudioEdits } from "@/lib/cv-studio/studio.mjs";
 import { SectionCard } from "./section-card";
 import { CvPreview } from "./cv-preview";
 import { CoverageMeter } from "./coverage-meter";
 
 type Loaded = { ok: true; reportNum: string; company: string; file: string; tree: BlockTree; doc: StudioDoc; edits: StudioEdits; stale: boolean; hasBase: boolean };
 type LoadState = { kind: "loading" } | { kind: "error"; reason: string } | { kind: "ready"; data: Loaded };
-type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; pdf: string; indexed: boolean; warnings: string[] } | { kind: "failed"; error: string };
+type SaveState =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "saved"; pdf: string; indexed: boolean; warnings: string[] }
+  | { kind: "outdated"; pdf: string }
+  | { kind: "failed"; error: string };
 
 const REASONS: Record<string, { title: string; body: string }> = {
   "no-tailored-cv": { title: "No tailored CV yet", body: "Generate a tailored CV from the report page first. The Studio opens it for review once it exists." },
@@ -55,7 +60,25 @@ export function CvStudio({ n }: { n: string }) {
 
 function Studio({ n, data }: { n: string; data: Loaded }) {
   const { doc, tree } = data;
-  const [edits, dispatch] = useReducer((e: StudioEdits, a: StudioAction) => studioReducer(e, a, doc), data.edits);
+  const [edits, dispatchEdit] = useReducer((e: StudioEdits, a: StudioAction) => studioReducer(e, a, doc), data.edits);
+  const history = useRef<StudioEdits[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const latestEdits = useRef(edits);
+  latestEdits.current = edits;
+  const recordEdit = useCallback((action: StudioAction) => {
+    const applied = applyRecordedEdit(latestEdits.current, action, doc, history.current);
+    if (!applied.recorded) return;
+    history.current = applied.history;
+    latestEdits.current = applied.edits;
+    setCanUndo(true);
+    dispatchEdit(action);
+  }, [doc]);
+  const undo = useCallback(() => {
+    const prev = history.current.pop();
+    setCanUndo(history.current.length > 0);
+    if (!prev) return;
+    dispatchEdit({ type: "replace", edits: prev });
+  }, []);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const resolved = useMemo(() => resolveStudio(doc, edits), [doc, edits]);
@@ -79,7 +102,7 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
       first.current = false;
       return;
     }
-    setSave((s) => (s.kind === "saved" ? { kind: "idle" } : s));
+    setSave((s) => (s.kind === "saved" || s.kind === "outdated" ? { kind: "idle" } : s));
     const t = setTimeout(() => {
       send("PUT", { edits })
         .then((r) => setAutosaveError(r.ok ? null : r.status === 409 ? STALE : "Autosave failed. Your latest changes are not saved yet."))
@@ -90,14 +113,34 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
 
   const saveForApply = useCallback(async () => {
     setSave({ kind: "saving" });
+    const sent = edits;
     try {
-      const r = await send("POST", { op: "save", edits });
+      const r = await send("POST", { op: "save", edits: sent });
       const body = (await r.json()) as { pdf?: string; indexed?: boolean; warnings?: string[]; error?: string };
-      setSave(r.ok && body.pdf ? { kind: "saved", pdf: body.pdf, indexed: body.indexed === true, warnings: body.warnings ?? [] } : { kind: "failed", error: SAVE_ERRORS[body.error ?? ""] ?? body.error ?? "Saving failed." });
+      if (!r.ok || !body.pdf) {
+        setSave({ kind: "failed", error: SAVE_ERRORS[body.error ?? ""] ?? body.error ?? "Saving failed." });
+      } else if (latestEdits.current !== sent) {
+        // An edit or an Undo landed while this PDF rendered, so it is not what the page shows.
+        setSave({ kind: "outdated", pdf: body.pdf });
+      } else {
+        setSave({ kind: "saved", pdf: body.pdf, indexed: body.indexed === true, warnings: body.warnings ?? [] });
+      }
     } catch {
       setSave({ kind: "failed", error: "Saving failed. Is the dashboard still running?" });
     }
   }, [edits, send]);
+
+  useEffect(() => {
+    const undoShortcut = (event: KeyboardEvent) => {
+      if (event.key !== "z" || event.shiftKey || !(event.metaKey || event.ctrlKey)) return;
+      const target = event.target;
+      if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+      event.preventDefault();
+      undo();
+    };
+    window.addEventListener("keydown", undoShortcut);
+    return () => window.removeEventListener("keydown", undoShortcut);
+  }, [undo]);
 
   const changed = doc.sections.flatMap((s) => s.items.flatMap((i) => i.bullets)).filter((b) => b.change !== "same").length;
 
@@ -112,9 +155,12 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Segmented label="Length" value={edits.preset.length} options={[["full", "Full"], ["one-page", "One page"]]} onChange={(v) => dispatch({ type: "preset", preset: { length: v as "full" | "one-page" } })} />
-          <Segmented label="Tone" value={edits.preset.tone} options={[["tailored", "Tailored"], ["conservative", "Conservative"]]} onChange={(v) => dispatch({ type: "preset", preset: { tone: v as "tailored" | "conservative" } })} />
-          <button onClick={() => dispatch({ type: "reset" })} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-brand">
+          <Segmented label="Length" value={edits.preset.length} options={[["full", "Full"], ["one-page", "One page"]]} onChange={(v) => recordEdit({ type: "preset", preset: { length: v as "full" | "one-page" } })} />
+          <Segmented label="Tone" value={edits.preset.tone} options={[["tailored", "Tailored"], ["conservative", "Conservative"]]} onChange={(v) => recordEdit({ type: "preset", preset: { tone: v as "tailored" | "conservative" } })} />
+          <button type="button" onClick={undo} disabled={!canUndo} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-brand disabled:opacity-40">
+            <Undo2 className="size-3.5" /> Undo
+          </button>
+          <button onClick={() => recordEdit({ type: "reset" })} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-brand">
             <RotateCcw className="size-3.5" /> Reset
           </button>
           <button
@@ -146,6 +192,9 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
           ))}
         </Notice>
       )}
+      {save.kind === "outdated" && (
+        <Notice tone="warn">Saved {save.pdf} from the CV as it was when you clicked Save. You changed it since, so Save for apply again before you apply.</Notice>
+      )}
       {save.kind === "failed" && <Notice tone="error">{save.error}</Notice>}
       {autosaveError && <Notice tone="error">{autosaveError}</Notice>}
 
@@ -153,7 +202,7 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
         <div className="space-y-4">
           <CoverageMeter coverage={resolved.coverage} dropped={dropped} />
           {arrange(doc.sections, edits.order.root).map((s, k, all) => (
-            <SectionCard key={s.id} n={n} section={s} edits={edits} hidden={resolved.view.hidden} dispatch={dispatch} siblings={all.map((x) => x.id)} first={k === 0} last={k === all.length - 1} />
+            <SectionCard key={s.id} n={n} section={s} edits={edits} hidden={resolved.view.hidden} dispatch={recordEdit} siblings={all.map((x) => x.id)} first={k === 0} last={k === all.length - 1} />
           ))}
         </div>
         <div className="lg:sticky lg:top-4 lg:self-start">

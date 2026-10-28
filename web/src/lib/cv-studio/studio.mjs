@@ -172,7 +172,8 @@ export function parseEdits(raw, sourceHash) {
  *   | {type: "restore", item: string, index: number}
  *   | {type: "unrestore", item: string, index: number}
  *   | {type: "preset", preset: Partial<Preset>}
- *   | {type: "reset"}} StudioAction
+ *   | {type: "reset"}
+ *   | {type: "replace", edits: StudioEdits}} StudioAction
  */
 
 /**
@@ -211,6 +212,8 @@ export function studioReducer(edits, action, doc) {
       return { ...edits, preset: { ...edits.preset, ...action.preset } };
     case "reset":
       return emptyEdits(edits.sourceHash);
+    case "replace":
+      return action.edits;
   }
 }
 
@@ -375,4 +378,38 @@ function readableRuns(parts) {
   });
   flush();
   return out;
+}
+
+/** How many earlier edit states Undo can step back through. */
+export const UNDO_LIMIT = 30;
+
+/**
+ * The undo history after recording `state`: oldest first, so Undo pops the
+ * most recent. Past the limit the oldest state is dropped.
+ *
+ * @param {StudioEdits[]} history
+ * @param {StudioEdits} state - The edits from before the change being recorded.
+ * @param {number} [limit]
+ * @returns {StudioEdits[]}
+ */
+export function pushUndo(history, state, limit = UNDO_LIMIT) {
+  return [...history, state].slice(-limit);
+}
+
+/**
+ * Record one edit against the edits on screen now.
+ *
+ * A wording save can call this after an await. The edits argument has to be
+ * the current ones, not the snapshot from when that request started, or Undo
+ * drops a hide that happened in between.
+ *
+ * @param {StudioEdits} current
+ * @param {StudioAction} action
+ * @param {StudioDoc} doc
+ * @param {StudioEdits[]} history
+ */
+export function applyRecordedEdit(current, action, doc, history) {
+  const next = studioReducer(current, action, doc);
+  if (next === current) return { edits: current, history, recorded: false };
+  return { edits: next, history: pushUndo(history, current), recorded: true };
 }
