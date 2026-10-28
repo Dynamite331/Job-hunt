@@ -137,13 +137,7 @@ async function loadFreeModels() {
         const p = m.pricing ?? {};
         return String(p.prompt) === '0' && String(p.completion) === '0';
       })
-      .map(m => m.id)
-      // Only current MiniMax text models enter automatic rotation. Explicit
-      // CAREER_OPS_MODEL requests bypass this catalog, including legacy IDs.
-      .filter(id => !id.startsWith('minimax/') || [
-        'minimax/minimax-m3.1-flash:free',
-        'minimax/minimax-m3',
-      ].includes(id));
+      .map(m => m.id);
 
     if (list.length === 0) throw new Error('No free models found in API response');
 

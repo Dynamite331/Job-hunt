@@ -75,7 +75,8 @@ try {
     const requests = [];
     const flash = 'minimax/minimax-m3.1-flash:free';
     const m3 = 'minimax/minimax-m3';
-    let catalog = ['minimax/minimax-m2.7:free', m3, flash];
+    const legacy = 'minimax/minimax-m2.7:free';
+    let catalog = [legacy, m3, flash];
     let paidM3 = false;
     globalThis.fetch = async (url, init) => {
       if (String(url).endsWith('/models')) return Response.json({
@@ -95,13 +96,20 @@ try {
     runner.blacklistedModels.add(flash);
     await runner.callOpenRouter('System fixture', 'User fixture');
     check('MiniMax gateway retains M3 when advertised as free', () => assert.equal(requests.at(-1).model, m3));
+    await runner.callOpenRouter('System fixture', 'User fixture');
+    check('MiniMax gateway retains non-listed free models', () => assert.equal(requests.at(-1).model, legacy));
 
     paidM3 = true;
     catalog.push('unrelated/model:free');
     const paid = await load('paid');
     paid.blacklistedModels.add(flash);
     await paid.callOpenRouter('System fixture', 'User fixture');
-    check('MiniMax gateway excludes paid M3 and legacy defaults, retaining other providers', () => {
+    check('MiniMax gateway excludes paid M3 but retains free legacy models', () => {
+      assert.equal(requests.at(-1).model, legacy);
+    });
+    paid.blacklistedModels.add(legacy);
+    await paid.callOpenRouter('System fixture', 'User fixture');
+    check('MiniMax gateway falls through to other providers after MiniMax options are unavailable', () => {
       assert.equal(requests.at(-1).model, 'unrelated/model:free');
     });
     for (const id of ['minimax/minimax-m2.7:free', m3, 'custom/private-model']) {
