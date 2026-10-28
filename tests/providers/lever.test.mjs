@@ -331,6 +331,7 @@ try {
       { text: 'Ops Lead', hostedUrl: 'https://jobs.lever.co/acme/r5', id: 'r5', categories: { location: 'Oslo' }, workplaceType: 'onsite' },
       { text: 'Ops Lead', hostedUrl: 'https://jobs.lever.co/acme/r6', id: 'r6', categories: { location: 'Oslo' }, workplaceType: '  remote  ' },
       { text: 'Ops Lead', hostedUrl: 'https://jobs.lever.co/acme/r7', id: 'r7', categories: {}, workplaceType: 'remote' },
+      { text: 'Ops Lead', hostedUrl: 'https://jobs.lever.co/acme/r8', id: 'r8', categories: { location: 'Remotely in Europe' }, workplaceType: 'remote' },
     ] },
   );
   const workplaceLocs = remoteRows.map(r => r.location);
@@ -340,7 +341,8 @@ try {
       && workplaceLocs[3] === 'Bend, OR; Oslo; Remote'
       && workplaceLocs[4] === 'Oslo'
       && workplaceLocs[5] === 'Oslo; Remote'
-      && workplaceLocs[6] === 'Remote') {
+      && workplaceLocs[6] === 'Remote'
+      && workplaceLocs[7] === 'Remotely in Europe; Remote') {
     pass('lever.fetch() appends Remote when workplaceType is remote and the location does not already say so');
   } else {
     fail(`lever.fetch() workplaceType locations = ${JSON.stringify(workplaceLocs)}`);

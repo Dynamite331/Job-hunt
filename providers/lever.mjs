@@ -51,6 +51,10 @@ function resolveApiUrl(entry) {
   return `https://api.${host[1]}/v0/postings/${slug}`;
 }
 
+// Same word edges as scan.mjs compileLocationKeyword, so "Remotely in Europe"
+// does not count as already saying Remote.
+const REMOTE_WORD_RE = /(?<![\p{L}\p{M}\p{N}])remote(?![\p{L}\p{M}\p{N}])/iu;
+
 /** Fold `categories.location` together with any extra `categories.allLocations`
  *  into one string. Lever puts a SINGLE primary city in `location`, and exposes
  *  the full set on multi-location postings in `allLocations` — reading only the
@@ -75,7 +79,7 @@ function resolveLocation(categories, workplaceType) {
     if (l && !merged.some(m => m.toLowerCase() === l.toLowerCase())) merged.push(l);
   }
   const remote = typeof workplaceType === 'string' && workplaceType.trim().toLowerCase() === 'remote';
-  if (remote && !merged.some(m => /remote/i.test(m))) merged.push('Remote');
+  if (remote && !merged.some(m => REMOTE_WORD_RE.test(m))) merged.push('Remote');
   return merged.join('; ');
 }
 
