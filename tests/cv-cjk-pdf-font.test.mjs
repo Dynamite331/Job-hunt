@@ -3,9 +3,10 @@
 // and 田 (U+7530) then come back as the Kangxi radicals U+2F2D and U+2F65.
 // Arial Unicode MS is the face this renderer actually embeds. It has to sit
 // after the Latin faces and before the generic family.
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { inflateSync } from 'zlib';
+import { listTree } from '../lib/walk-tree.mjs';
 import { pass, fail, warn, ROOT, toolUnavailable } from './helpers.mjs';
 
 console.log('\nCV templates — Han text stays Han in the PDF');
@@ -16,38 +17,69 @@ const FONT_FILES = [
   '/Library/Fonts/Arial Unicode MS.ttf',
 ];
 
-function htmlFiles(dir, out = []) {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) htmlFiles(p, out);
-    else if (name.endsWith('.html')) out.push(p);
-  }
-  return out;
-}
-
-function inflated(pdf) {
-  const chunks = [];
-  let i = 0;
-  while (i < pdf.length) {
-    const idx = pdf.indexOf('stream', i);
-    if (idx < 0) break;
-    const dictStart = pdf.lastIndexOf('<<', idx);
-    const dict = dictStart >= 0 ? pdf.subarray(dictStart, idx).toString('latin1') : '';
-    let start = idx + 6;
-    if (pdf[start] === 0x0d) start++;
-    if (pdf[start] === 0x0a) start++;
-    const end = pdf.indexOf('endstream', start);
-    if (end < 0) break;
-    if (dict.includes('/FlateDecode')) {
+// Read the text a PDF viewer would show: walk the page content stream, track
+// the selected font, and map each glyph code through that font's /ToUnicode
+// CMap. Only glyphs the page draws count, so an unused CMap entry can't pass.
+function pdfObjects(pdf) {
+  const objects = new Map();
+  const src = pdf.toString('latin1');
+  for (const m of src.matchAll(/(\d+) 0 obj\s*([\s\S]*?)endobj/g)) {
+    const body = m[2];
+    const at = body.indexOf('stream');
+    const dict = at >= 0 ? body.slice(0, at) : body;
+    let stream = null;
+    if (at >= 0 && dict.includes('/FlateDecode')) {
+      let start = m.index + m[0].indexOf(body) + at + 6;
+      if (pdf[start] === 0x0d) start++;
+      if (pdf[start] === 0x0a) start++;
+      const end = pdf.indexOf('endstream', start);
       let data = pdf.subarray(start, end);
       while (data.length && (data[data.length - 1] === 0x0a || data[data.length - 1] === 0x0d)) {
         data = data.subarray(0, data.length - 1);
       }
-      chunks.push(inflateSync(data).toString('latin1'));
+      stream = inflateSync(data).toString('latin1');
     }
-    i = end + 9;
+    objects.set(m[1], { dict, stream });
   }
-  return chunks.join('\n');
+  return objects;
+}
+
+function toUnicodeMap(cmap) {
+  const map = new Map();
+  const hex = (h) => String.fromCodePoint(...h.match(/.{4}/g).map((c) => parseInt(c, 16)));
+  for (const block of cmap.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
+    for (const [, code, uni] of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
+      map.set(parseInt(code, 16), hex(uni));
+    }
+  }
+  for (const block of cmap.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
+    for (const [, lo, hi, uni] of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
+      const base = parseInt(uni, 16);
+      for (let c = parseInt(lo, 16); c <= parseInt(hi, 16); c++) map.set(c, String.fromCodePoint(base + c - parseInt(lo, 16)));
+    }
+  }
+  return map;
+}
+
+function pdfText(pdf) {
+  const objects = pdfObjects(pdf);
+  let out = '';
+  for (const { dict } of objects.values()) {
+    if (!/\/Type \/Page\b/.test(dict)) continue;
+    const fonts = new Map();
+    const fontDict = dict.match(/\/Font\s*<<([\s\S]*?)>>/)?.[1] ?? '';
+    for (const [, name, ref] of fontDict.matchAll(/\/(\w+)\s+(\d+) 0 R/g)) {
+      const cmapRef = objects.get(ref)?.dict.match(/\/ToUnicode (\d+) 0 R/)?.[1];
+      fonts.set(name, toUnicodeMap(objects.get(cmapRef)?.stream ?? ''));
+    }
+    const content = objects.get(dict.match(/\/Contents (\d+) 0 R/)?.[1])?.stream ?? '';
+    let font = new Map();
+    for (const [, name, glyphs] of content.matchAll(/\/(\w+) [\d.]+ Tf|<([0-9A-Fa-f]+)> ?Tj/g)) {
+      if (name) font = fonts.get(name) ?? new Map();
+      else for (const code of glyphs.match(glyphs.length % 4 ? /.{2}/g : /.{4}/g) ?? []) out += font.get(parseInt(code, 16)) ?? '\uFFFD';
+    }
+  }
+  return out;
 }
 
 function hanFallbackLast(decl) {
@@ -60,8 +92,9 @@ function hanFallbackLast(decl) {
     && (first.includes('Liberation') || first === '"Helvetica"');
 }
 
+const templates = listTree(join(ROOT, 'templates'), { match: /\.html$/ });
 let stacks = 0;
-for (const file of htmlFiles(join(ROOT, 'templates'))) {
+for (const file of templates) {
   const rel = file.slice(ROOT.length + 1);
   const decls = [...readFileSync(file, 'utf8').matchAll(/--font-family:\s*([^;]+);/g)].map((m) => m[1].trim());
   for (const decl of decls) {
@@ -72,6 +105,41 @@ for (const file of htmlFiles(join(ROOT, 'templates'))) {
 }
 if (stacks >= 8) pass(`checked ${stacks} template font stacks`);
 else fail(`expected at least 8 --font-family lines, found ${stacks}`);
+
+// The count above only sees --font-family. The locale rules (lang="ja",
+// lang="zh-CN", and so on) set font-family directly, and zh-minimal has no
+// --font-family at all, so check those stacks by name. A rule that leads with
+// a bare var(--font-family) inherits Arial Unicode MS from the token above.
+const LOCALE_STACK_FILES = [
+  'templates/ats/cv-template.ats.html',
+  'templates/cv-template.compact.html',
+  'templates/cv-template.executive.html',
+  'templates/cv-template.html',
+  'templates/cv-template.jake.html',
+  'templates/cv-template.leadership.html',
+  'templates/cv-template.modern.html',
+  'templates/cv-template.zh-minimal.html',
+];
+const CJK_FACE = /Hiragino|PingFang|Noto (?:Sans|Serif) CJK|YaHei|JhengHei|Yu Gothic|Yu Mincho|Source Han|Malgun|Apple SD Gothic/;
+for (const rel of LOCALE_STACK_FILES) {
+  const css = readFileSync(join(ROOT, rel), 'utf8');
+  const tokenHasHan = [...css.matchAll(/--font-family:\s*([^;]+);/g)].some((m) => m[1].includes('Arial Unicode MS'));
+  const localeStacks = [...css.matchAll(/[^-]font-family:\s*([^;{}]+);/g)]
+    .map((m) => m[1].replace(/\s+/g, ' ').trim())
+    .filter((decl) => CJK_FACE.test(decl));
+  const missing = localeStacks.filter((decl) => !decl.includes('Arial Unicode MS')
+    && !(tokenHasHan && decl.startsWith('var(--font-family),')));
+  if (localeStacks.length === 0) fail(`${rel} has no CJK locale font-family rules to check`);
+  else if (missing.length === 0) pass(`${rel} names Arial Unicode MS in its ${localeStacks.length} CJK locale stacks`);
+  else fail(`${rel} CJK locale stacks without Arial Unicode MS: ${missing.join(' | ')}`);
+}
+const zhBody = readFileSync(join(ROOT, 'templates/cv-template.zh-minimal.html'), 'utf8')
+  .match(/html\[lang="zh"\][^{]*\{[^}]*?font-family:\s*([^;]+);/)?.[1].replace(/\s+/g, ' ') ?? '';
+if (zhBody.startsWith("var(--font-family, 'Arial Unicode MS'), 'Arial Unicode MS', 'PingFang SC'")) {
+  pass('zh-minimal leads its Simplified Chinese stack with Arial Unicode MS, then PingFang SC');
+} else {
+  fail(`zh-minimal Simplified Chinese stack should lead with Arial Unicode MS: ${zhBody || '(not found)'}`);
+}
 
 const fontFile = FONT_FILES.find((p) => existsSync(p));
 if (!fontFile) {
@@ -92,19 +160,17 @@ if (!fontFile) {
       await page.setContent(html);
       const pdf = Buffer.from(await page.pdf({ format: 'Letter', printBackground: true }));
       const raw = pdf.toString('latin1');
-      const text = inflated(pdf);
+      const text = pdfText(pdf);
       const flags = {
         arialUnicode: raw.includes('ArialUnicode'),
-        helvetica: raw.includes('Helvetica'),
-        shan: text.includes('5C71'),
-        tian: text.includes('7530'),
-        radicalShan: text.includes('2F2D'),
-        radicalTian: text.includes('2F65'),
+        // Any Latin face from the stack will do: Helvetica Neue on macOS,
+        // Liberation Sans or Arial elsewhere.
+        latinFace: /\/BaseFont \/[A-Z]{6}\+(?:Helvetica|LiberationSans|Arial(?!Unicode)|DejaVuSans)/.test(raw),
       };
-      if (flags.arialUnicode && flags.helvetica && flags.shan && flags.tian && !flags.radicalShan && !flags.radicalTian) {
-        pass('the PDF stores 山 and 田 as U+5C71 and U+7530, and still embeds a Latin face');
+      if (text === 'Jane Doe worked with 山田.' && flags.arialUnicode && flags.latinFace) {
+        pass('the PDF text reads "Jane Doe worked with 山田." and still embeds a Latin face');
       } else {
-        fail(`PDF text layer: ${JSON.stringify(flags)}`);
+        fail(`PDF text layer: ${JSON.stringify({ text, ...flags })}`);
       }
     }
   } finally {
