@@ -1,13 +1,9 @@
-// The CV Studio live preview is the iframe, not the stored HTML. These cases
-// are what that frame must show: markdown bold and italic as elements, and
-// markers left alone inside styles, scripts, and tag attributes.
-
 import test from "node:test";
 import assert from "node:assert/strict";
 import { previewHtml } from "../../src/lib/cv-studio/preview-html.mjs";
 
 function shown(html) {
-  return previewHtml(html).replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "");
+  return previewHtml(html).replace(/<style data-cv-preview-fit>[\s\S]*?<\/style>/, "");
 }
 
 test("live preview renders markdown bold, including quotes and a leading tilde", () => {
