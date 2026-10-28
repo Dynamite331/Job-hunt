@@ -67,7 +67,7 @@ test('the standalone branch looks for an install, asks before init and resumes t
   assert.ok(branch.includes('npx @santifer/career-ops init'), 'standalone branch does not name the init command');
   assert.match(branch, /Ask before running it/, 'standalone branch must ask before installing');
   assert.match(branch, /original request/, 'standalone branch must pick the user\'s request back up');
-  assert.ok(branch.includes('https://github.com/career-ops-hq/career-ops'), 'standalone branch must link the canonical repo');
+  assert.match(branch, /https:\/\/github\.com\/career-ops-hq\/career-ops(?![\w-])/, 'standalone branch must link the canonical repo');
   assert.doesNotMatch(branch, /github\.com\/santifer\//, 'standalone branch links the old repo path');
 });
 
