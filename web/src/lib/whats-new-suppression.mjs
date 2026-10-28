@@ -25,11 +25,14 @@
 // recruiter posted under the same title) for good: #3131's silent false
 // negative in a narrower shape. So when the evaluated row's posting URL (its
 // URL cell, else its report's `**URL:**`) and the scan row's URL are both
-// known, they decide: the same key is the evaluated posting, a different key
-// is another opening. It is the rule verify-pipeline.mjs applies to duplicate
-// reports: two present-and-different URLs prove two openings, a missing one
-// proves nothing. So an unknown URL on either side falls back to company +
-// role, and #3131's trade stands unchanged for every row without one.
+// known, they decide: only two URLs the core's postingUrlRelation calls
+// 'distinct' (two pages, or one page in two known languages) are another
+// opening. It is the rule verify-pipeline.mjs applies to duplicate reports:
+// two present-and-different URLs prove two openings, a missing one proves
+// nothing. So an unknown URL on either side falls back to company + role, and
+// so does a language on one side only (`/o/a` vs `/o/a?lang=de`), which the
+// core reads as proof of neither; a region (`en-GB` vs `en`) is the same
+// posting. #3131's trade stands unchanged for every row without that proof.
 //
 // Two URLs on DIFFERENT hosts are not evidence either. An aggregator listing
 // is evaluated under the employer's URL (AGENTS.md, "Aggregator Listings"), so
@@ -49,7 +52,7 @@
 // core/url-key.mjs, the parity-tested mirror the web already keys posting URLs
 // with on the server (Explore dedup, inbox reconcile).
 
-import { normalizeUrl } from "./core/url-key.mjs";
+import { normalizeUrl, postingUrlRelation } from "./core/url-key.mjs";
 import { unwrapReportUrlToken } from "./core/report-url-token.mjs";
 
 // The core's report-URL rule (merge-tracker.mjs resolveReportUrl,
@@ -77,19 +80,20 @@ export function suppressionKey(norm, company, role) {
 }
 
 /**
- * @typedef {{key: string, host: string}} PostingId
+ * @typedef {{url: string, host: string}} PostingId
  * @typedef {{company?: string, role?: string, url?: string, report?: string}} EvaluatedApp
  */
 
 /**
- * Posting identity of a URL, or null when it has no key.
+ * Posting identity of a URL, or null when it has no key. The URL itself is
+ * kept for postingUrlRelation, which reads its language param.
  *
  * @param {unknown} raw
  * @returns {PostingId | null}
  */
 function postingId(raw) {
   const key = normalizeUrl(raw);
-  return key ? { key, host: new URL(key).host } : null;
+  return key ? { url: /** @type {string} */ (raw), host: new URL(key).host } : null;
 }
 
 /**
@@ -154,7 +158,8 @@ export function isEvaluated(keys, norm, company, title, url) {
   if (!scanned) return true;
   return postings.some((resolve) => {
     const evaluated = resolve();
-    // Only two known URLs on one host can prove two openings.
-    return !evaluated || evaluated.host !== scanned.host || evaluated.key === scanned.key;
+    // Only two known URLs on one host, distinct by the core's rule, prove two
+    // openings. Any other evaluated row hides the scan row.
+    return !evaluated || evaluated.host !== scanned.host || postingUrlRelation(evaluated.url, scanned.url) !== "distinct";
   });
 }

@@ -230,3 +230,30 @@ test("reports are read lazily: only for a company + role match, once each", () =
   isEvaluated(keys, norm, "Initech", "Staff Engineer", REQ_B);
   assert.deepEqual(reads, ["[1](../reports/001-acme-2026-10-01.md)"], "expected one read, for the matching row only");
 });
+
+test("a language param is read the way the core reads it", () => {
+  // The core compares posting URLs through postingUrlRelation (url-key.mjs):
+  // a region is not another posting (`en-GB` vs `en` is 'same'), and a
+  // language on one side only proves nothing either way. Neither is proof of
+  // two openings, so both stay hidden. Two known, different languages are two
+  // postings, as the core keeps them as two tracker rows.
+  const PAGE = "https://acme.recruitee.com/o/staff-engineer";
+  const cases = [
+    [`${PAGE}?lang=en-GB`, `${PAGE}?lang=en`, true],
+    [PAGE, `${PAGE}?lang=de`, true],
+    [`${PAGE}?lang=de`, PAGE, true],
+    [`${PAGE}?lang=de`, `${PAGE}?lang=en`, false],
+  ];
+  for (const [evaluated, scanned, hidden] of cases) {
+    const { keys } = evaluatedWithReports([["Acme", "Staff Engineer", reportWithUrl(evaluated)]]);
+    assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", scanned), hidden, `${evaluated} vs ${scanned}`);
+  }
+
+  // A distinct posting must not outweigh an ambiguous one: the bare page may be
+  // the German version, so the German scan row stays hidden.
+  const { keys } = evaluatedWithReports([
+    ["Acme", "Staff Engineer", reportWithUrl(PAGE)],
+    ["Acme", "Staff Engineer", reportWithUrl("https://acme.recruitee.com/o/staff-engineer-berlin")],
+  ]);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", `${PAGE}?lang=de`), true);
+});
