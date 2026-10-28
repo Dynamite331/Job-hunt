@@ -541,11 +541,10 @@ async function cmdAuth(args) {
     process.exit(1);
   }
   const envPath = path.join(DATA_ROOT, '.env');
-  const envText = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
   const { envText: next } = await runGmailAuth({
     clientId,
     clientSecret,
-    envText,
+    readEnv: () => (existsSync(envPath) ? readFileSync(envPath, 'utf8') : ''),
     log(url) {
       console.log('Open this link to let CareerOps read job mail:');
       console.log(url);

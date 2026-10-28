@@ -145,6 +145,34 @@ function dropRoot(prefix) {
   return { root, dir };
 }
 
+test('a base64 MIME part is decoded before its job links are read', async () => {
+  const { root, dir } = dropRoot('linkedin-drop-base64-');
+  const html = Buffer.from(`<a href="https://www.linkedin.com/comm/jobs/view/${JOB_ID}?trk=eml">Analyst</a>`).toString('base64');
+  writeFileSync(join(dir, 'alert.eml'), [
+    `From: ${['jobs-noreply', 'linkedin.example'].join('@')}`,
+    'Subject: Jobs for you',
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/alternative; boundary="b1"',
+    '',
+    '--b1',
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    ...html.match(/.{1,76}/g),
+    '--b1--',
+    '',
+  ].join('\r\n'));
+  try {
+    await withDataEnv(root, async () => {
+      const result = await importMailDrop({ root, dir });
+      assert.equal(result.added, 1);
+      assert.match(readFileSync(join(root, 'data', 'pipeline.md'), 'utf8'), new RegExp(`https://www.linkedin.com/jobs/view/${JOB_ID}`));
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('an unreadable alert file is reported and the files after it still import', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
   const { root, dir } = dropRoot('linkedin-drop-unreadable-');
   writeFileSync(join(dir, 'a.eml'), 'https://www.linkedin.com/jobs/view/6161616161\n');
@@ -229,7 +257,7 @@ test('loopback sign-in stores the refresh token and does not print it', async ()
   const result = await runGmailAuth({
     clientId: 'client.example',
     clientSecret: 'secret.example',
-    envText: 'GMAIL_CLIENT_ID=client.example\n',
+    readEnv: () => 'GMAIL_CLIENT_ID=client.example\n',
     timeoutMs: 5000,
     log(url) { printed += url; },
     open(url) {
@@ -334,11 +362,29 @@ test('doctor explains invalid_grant from the token endpoint', async () => {
   }
 });
 
+test('an .env edit made while the browser sign-in waits is kept', async () => {
+  let env = 'GMAIL_CLIENT_ID=client.example\n';
+  const result = await runGmailAuth({
+    clientId: 'client.example',
+    clientSecret: 'secret.example',
+    readEnv: () => env,
+    timeoutMs: 5000,
+    open(url) {
+      env += 'CAREER_OPS_CLI=codex\n';
+      const auth = new URL(url);
+      fetch(`${auth.searchParams.get('redirect_uri')}/?code=code.example&state=${encodeURIComponent(auth.searchParams.get('state'))}`).catch(() => {});
+    },
+    fetchFn: async () => ({ ok: true, text: async () => JSON.stringify({ refresh_token: 'refresh.example' }) }),
+  });
+  assert.match(result.envText, /^CAREER_OPS_CLI=codex$/m);
+  assert.match(result.envText, /^GMAIL_REFRESH_TOKEN=refresh\.example$/m);
+});
+
 test('a stray request on the loopback port does not end the sign-in', async () => {
   const result = await runGmailAuth({
     clientId: 'client.example',
     clientSecret: 'secret.example',
-    envText: '',
+    readEnv: () => '',
     timeoutMs: 5000,
     async open(url) {
       const auth = new URL(url);
@@ -359,7 +405,7 @@ test('a rejected sign-in code is not blamed on the 7-day Testing expiry', async 
   await assert.rejects(runGmailAuth({
     clientId: 'client.example',
     clientSecret: 'secret.example',
-    envText: '',
+    readEnv: () => '',
     timeoutMs: 5000,
     open(url) {
       const auth = new URL(url);
@@ -387,6 +433,9 @@ test('an enabled gmail plugin runs on the schedule only with auto: true', async 
     writeFileSync(join(root, 'config', 'plugins.yml'), 'plugins:\n  gmail:\n    enabled: true\n    auto: true\n');
     await pollLinkedInInbox(root, { spawnSyncImpl });
     assert.equal(calls.length, 1);
+    writeFileSync(join(root, '.env'), 'export GMAIL_CLIENT_ID=client.example\nGMAIL_CLIENT_SECRET = secret.example\nGMAIL_REFRESH_TOKEN="refresh.example"\n');
+    await pollLinkedInInbox(root, { spawnSyncImpl });
+    assert.equal(calls.length, 2, 'export prefixes, spaces around =, and quotes parse the way dotenv reads them');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
