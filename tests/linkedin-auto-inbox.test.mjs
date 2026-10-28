@@ -11,9 +11,20 @@ import { importMailDrop } from '../lib/linkedin-mail-drop.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const JOB_ID = '5151515151';
+const DATA_PATH_VARS = ['CAREER_OPS_SCAN_HISTORY', 'CAREER_OPS_PIPELINE', 'CAREER_OPS_TRACKER', 'CAREER_OPS_DATA_DIR'];
 
-// importMailDrop writes scan history through scan.mjs, which reads these once.
-// Point them at the test's own root so nothing lands in this checkout's data/.
+// The env for a spawned runner, with every data path left to follow
+// CAREER_OPS_ROOT. Inherited from a developer shell, they would point the
+// child at that developer's own files.
+function runnerEnv(root) {
+  const env = { ...process.env, CAREER_OPS_ROOT: root, NO_COLOR: '1' };
+  for (const key of DATA_PATH_VARS) delete env[key];
+  return env;
+}
+
+// importMailDrop reads these on every call. Point them at the test's own root
+// so nothing lands in this checkout's data/. It passes the scan history path to
+// scan.mjs per call, so a later test does not reuse the first test's path.
 function withDataEnv(root, fn) {
   const keys = ['CAREER_OPS_SCAN_HISTORY', 'CAREER_OPS_PIPELINE', 'CAREER_OPS_TRACKER'];
   const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -227,6 +238,24 @@ test('an unreadable alert file is reported and the files after it still import',
   }
 });
 
+test('each import writes scan history under its own root, not an earlier test\'s', async () => {
+  for (const name of ['first', 'second']) {
+    const root = mkdtempSync(join(tmpdir(), `linkedin-history-${name}-`));
+    const dir = join(root, 'data', 'linkedin-alerts');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(root, 'data', 'pipeline.md'), '# Pipeline\n\n## Pending\n\n## Processed\n');
+    writeFileSync(join(dir, 'alert.eml'), `https://www.linkedin.com/jobs/view/${JOB_ID}\n`);
+    try {
+      await withDataEnv(root, async () => {
+        assert.equal((await importMailDrop({ root, dir })).added, 1);
+      });
+      assert.match(readFileSync(join(root, 'data', 'scan-history.tsv'), 'utf8'), new RegExp(JOB_ID), name);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
 test('two imports of the same folder at once add each job once', async () => {
   const { root, dir } = dropRoot('linkedin-drop-overlap-');
   writeFileSync(join(dir, 'alert.eml'), `https://www.linkedin.com/jobs/view/${JOB_ID}\n`);
@@ -316,7 +345,7 @@ test('the scan schedule drains the alert folder', () => {
       cwd: ROOT,
       encoding: 'utf8',
       timeout: 60_000,
-      env: { ...process.env, CAREER_OPS_ROOT: root, NO_COLOR: '1' },
+      env: runnerEnv(root),
     });
     const pipeline = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
     assert.match(pipeline, new RegExp(`https://www.linkedin.com/jobs/view/${JOB_ID}`), result.stderr);
@@ -336,7 +365,7 @@ test('running one scheduled job by hand leaves the alert folder alone', () => {
       cwd: ROOT,
       encoding: 'utf8',
       timeout: 60_000,
-      env: { ...process.env, CAREER_OPS_ROOT: root, NO_COLOR: '1' },
+      env: runnerEnv(root),
     });
     assert.deepEqual(readdirSync(dir), ['alert.eml']);
     assert.doesNotMatch(readFileSync(join(root, 'data', 'pipeline.md'), 'utf8'), new RegExp(JOB_ID));
