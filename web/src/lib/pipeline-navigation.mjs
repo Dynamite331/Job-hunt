@@ -1,4 +1,4 @@
-import { canonStatus } from "./status-alias.mjs";
+import { statusToken } from "./pipeline-sankey.mjs";
 
 // Carry only the list's own filters through a report URL. Return destinations
 // remain fixed to /pipeline; no arbitrary "returnTo" URL or browser storage.
@@ -43,18 +43,20 @@ export const PIPELINE_TABS = /** @type {const} */ ([
 
 const RESIDUAL_TABS = new Set(["INBOX", "ALL", "OTHER"]);
 
+const STAGE_TABS = new Set(PIPELINE_TABS.filter((tab) => !RESIDUAL_TABS.has(tab)));
+
 /**
- * Stage tabs keep the substring test. OTHER is every status that matches none of them.
+ * A row sits on the tab named by the Analytics sankey's statusToken, so tab
+ * counts and sankey leaves agree: "Not evaluated" is OTHER, and a dated
+ * "Aplicado 2026-08-20" is APPLIED. OTHER is every token that is no stage.
  * @param {string} status
  * @param {string} tab
  * @returns {boolean}
  */
 export function rowOnPipelineTab(status, tab) {
-  const token = canonStatus(status);
-  if (tab === "OTHER") {
-    return PIPELINE_TABS.filter((stage) => !RESIDUAL_TABS.has(stage)).every((stage) => !token.includes(stage));
-  }
-  return token.includes(tab);
+  const token = statusToken(status);
+  if (tab === "OTHER") return !STAGE_TABS.has(token);
+  return token === tab;
 }
 
 /**

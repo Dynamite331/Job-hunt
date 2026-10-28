@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pipelineQuery, pipelineTab, rowOnPipelineTab, PIPELINE_TABS } from "../../src/lib/pipeline-navigation.mjs";
+import { classifyLeaf } from "../../src/lib/pipeline-sankey.mjs";
 
 test("direct report visits retain the default Pipeline destination", () => {
   assert.equal(pipelineQuery({}), "");
@@ -53,6 +54,17 @@ test("an unknown status has its own tab and is not counted as evaluated", () => 
   const counted = stages.reduce((n, tab) => n + rows.filter((status) => rowOnPipelineTab(status, tab)).length, 0)
     + rows.filter((status) => rowOnPipelineTab(status, "OTHER")).length;
   assert.equal(counted, rows.length);
+});
+
+test("tabs read a status the way the Analytics sankey does", () => {
+  assert.equal(rowOnPipelineTab("Not evaluated", "EVALUATED"), false);
+  assert.equal(rowOnPipelineTab("Not evaluated", "OTHER"), true);
+  assert.equal(rowOnPipelineTab("Aplicado 2026-08-20", "APPLIED"), true);
+  assert.equal(rowOnPipelineTab("Aplicado 2026-08-20", "OTHER"), false);
+  for (const status of ["Not evaluated", "Aplicado 2026-08-20", "Interview 2026-09-01", "**Rejected**", "Paused", "Evaluated", "SKIP", "", "—"]) {
+    const otherLeaf = classifyLeaf({ n: 1, status }, []) === "other";
+    assert.equal(rowOnPipelineTab(status, "OTHER"), otherLeaf, `${JSON.stringify(status)} OTHER tab vs sankey`);
+  }
 });
 
 test("pipelineTab falls back to INBOX and reads the first repeated value", () => {
