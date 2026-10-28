@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cvReadiness } from "../../src/lib/cv/quality.ts";
+import { cvReadiness } from "../../src/lib/cv/readiness.mjs";
 import { onboardingChecklist, PREREQS } from "../../src/lib/home/onboarding-checklist.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
