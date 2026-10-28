@@ -69,15 +69,18 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
     (method: "PUT" | "POST", body: object, keepalive = false) => {
       const payload = JSON.stringify(body);
       const bytes = new TextEncoder().encode(payload).length;
-      const sent = queue.current.then(() =>
+      const start = () =>
         fetch(`/api/cv-studio/${encodeURIComponent(n)}`, {
           method,
           headers: { "Content-Type": "application/json" },
           body: payload,
           keepalive: keepalive && bytes < KEEPALIVE_BYTES,
-        }),
-      );
-      queue.current = sent.catch(() => {});
+        });
+      // A keepalive request is the page-exit flush. It starts now: queued
+      // behind an autosave, it might never start before the page is gone.
+      // The server drops it if an older PUT from this tab lands after it.
+      const sent = keepalive ? start() : queue.current.then(start);
+      queue.current = Promise.all([queue.current, sent]).catch(() => {});
       return sent;
     },
     [n],
@@ -87,16 +90,22 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
   const savingJsonRef = useRef<string | null>(null);
   const editsRef = useRef(edits);
   editsRef.current = edits;
+  const tabRef = useRef(Math.random().toString(36).slice(2, 12));
+  const revRef = useRef(0);
   const [, rerender] = useState(0);
   const showStatus = useCallback(() => rerender((n) => n + 1), []);
 
   const putEdits = useCallback(
     (payload: StudioEdits, keepalive: boolean) => {
       const serialized = JSON.stringify(payload);
-      if (serialized === savedJsonRef.current || serialized === savingJsonRef.current) return;
+      if (serialized === savedJsonRef.current) return;
+      // An autosave already carrying these edits has no keepalive, so a full
+      // unload can cancel it. On exit, send them again with keepalive.
+      if (serialized === savingJsonRef.current && !keepalive) return;
       savingJsonRef.current = serialized;
       showStatus();
-      send("PUT", { edits: payload }, keepalive)
+      revRef.current += 1;
+      send("PUT", { edits: payload, tab: tabRef.current, rev: revRef.current }, keepalive)
         .then((r) => {
           if (savingJsonRef.current !== serialized) return;
           savingJsonRef.current = null;
@@ -105,12 +114,12 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
             showStatus();
             return;
           }
+          // The server now holds this payload. If the edits moved on, even back
+          // to what was saved before it, send them.
           const latest = JSON.stringify(editsRef.current);
           setAutosaveError(null);
-          if (latest === serialized || savedJsonRef.current !== latest) {
-            savedJsonRef.current = serialized;
-            if (latest !== serialized) putEdits(editsRef.current, keepalive);
-          }
+          savedJsonRef.current = serialized;
+          if (latest !== serialized) putEdits(editsRef.current, keepalive);
           showStatus();
         })
         .catch(() => {
