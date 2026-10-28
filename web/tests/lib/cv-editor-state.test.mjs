@@ -1,0 +1,74 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { draftToStore, editorReducer, editorStatus, initialEditor, shouldSave } from "../../src/lib/cv-editor-state.mjs";
+
+const ready = (content, extra = {}) => ({
+  ...initialEditor(),
+  phase: "ready",
+  content,
+  saved: extra.saved ?? content,
+  exists: true,
+  ...extra,
+});
+
+test("a new edit is unsaved, and a finished save of that same text is saved", () => {
+  let state = editorReducer(ready("Jane Doe\n"), { type: "edit", content: "Jane Doe\n\nTuesday review." });
+  assert.equal(editorStatus(state).label, "Unsaved");
+  assert.equal(editorStatus(state).canSave, true);
+  state = editorReducer(state, { type: "save-start", content: state.content });
+  assert.equal(editorStatus(state).label, "Saving");
+  state = editorReducer(state, { type: "save-ok", content: "Jane Doe\n\nTuesday review." });
+  assert.equal(editorStatus(state).label, "Saved");
+  assert.equal(shouldSave(state), false);
+  assert.equal(draftToStore(state), null);
+});
+
+test("a save that finishes after a newer edit does not call the newer edit saved", () => {
+  let state = editorReducer(ready("one"), { type: "edit", content: "one two" });
+  state = editorReducer(state, { type: "save-start", content: "one two" });
+  state = editorReducer(state, { type: "edit", content: "one two three" });
+  assert.equal(editorStatus(state).label, "Unsaved");
+  state = editorReducer(state, { type: "save-ok", content: "one two" });
+  assert.equal(state.saved, "one two");
+  assert.equal(state.content, "one two three");
+  assert.equal(editorStatus(state).label, "Unsaved");
+  assert.equal(shouldSave(state), true);
+  assert.deepEqual(draftToStore(state), { base: "one two", content: "one two three" });
+});
+
+test("a failed save stays unsaved and names the error", () => {
+  let state = editorReducer(ready("one"), { type: "edit", content: "one two" });
+  state = editorReducer(state, { type: "save-start", content: "one two" });
+  state = editorReducer(state, { type: "save-failed", content: "one two", error: "write failed" });
+  assert.equal(editorStatus(state).label, "Unsaved");
+  assert.equal(editorStatus(state).canSave, true);
+  assert.equal(state.error, "write failed");
+  assert.equal(state.inflight, null);
+});
+
+test("a draft written on top of the file comes back, and a draft for an older file does not", () => {
+  const restored = editorReducer(initialEditor(), {
+    type: "loaded",
+    content: "on disk",
+    exists: true,
+    draft: { base: "on disk", content: "on disk plus a line" },
+  });
+  assert.equal(restored.content, "on disk plus a line");
+  assert.equal(editorStatus(restored).label, "Unsaved");
+
+  const stale = editorReducer(initialEditor(), {
+    type: "loaded",
+    content: "replaced on disk",
+    exists: true,
+    draft: { base: "on disk", content: "on disk plus a line" },
+  });
+  assert.equal(stale.content, "replaced on disk");
+  assert.equal(editorStatus(stale).label, "Saved");
+});
+
+test("a failed load cannot be saved, so an empty page cannot replace the file", () => {
+  const state = editorReducer(initialEditor(), { type: "load-failed", error: "The CV could not be loaded." });
+  assert.equal(editorStatus(state).canSave, false);
+  assert.equal(shouldSave(state), false);
+  assert.equal(state.content, "");
+});
