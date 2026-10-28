@@ -503,18 +503,25 @@ function compileUsStateAbbrev(abbr) {
 // "City, Region, CC" ends in an ISO country code, and several of those are
 // also USPS codes: "Bengaluru, Karnataka, IN" read as Indiana and "Toronto,
 // ON, CA" as California, so always_allow beat the user's own block entry.
-// A two-letter last part after two or more parts is the country slot, never
-// a state. "Austin, TX, US" still keeps TX. So does "Austin TX, US", where the
-// state sits in the city part. Providers join several places with "; "
-// (Lever) or " · " (Jobvite), so each place gets its own check:
-// "Bengaluru, Karnataka, IN; Remote" must still drop IN, and the TX in
+// A two-letter last part after two or more parts is the country slot. So is
+// the last part of "Austin TX, US" or "Perth WA, AU", where a state code ends
+// the city part. "Santa Fe, NM" and "Dublin, OH" keep their state. A place
+// with a country slot other than US has no US state at all, so "Perth WA, AU"
+// does not read as Washington. Providers join several places with "; "
+// (Lever) or " · " (Jobvite), and each place gets its own check, so the TX in
 // "Austin TX · Toronto, ON, CA" counts even though it is not at the end.
+const USPS_CODES = new Set(USPS_STATES.map(([, abbr]) => abbr));
+
 function placesWithoutCountryCode(lower) {
-  return lower.split(/[;·]/).map((place) => {
+  return lower.split(/[;·]/).flatMap((place) => {
     const parts = place.split(',');
-    if (parts.length < 2 || !/^\s*\p{L}{2}\s*$/u.test(parts.at(-1))) return place;
-    if (parts.length === 2 && !/(?:^|[^\p{L}\p{M}\p{N}])\p{L}{2}\s*$/u.test(parts[0])) return place;
-    return parts.slice(0, -1).join(',');
+    const code = parts.at(-1).trim();
+    if (parts.length < 2 || !/^\p{L}{2}$/u.test(code)) return [place];
+    if (parts.length === 2) {
+      const cityTail = /(?:^|[^\p{L}\p{M}\p{N}])(\p{L}{2})\s*$/u.exec(parts[0]);
+      if (!cityTail || !USPS_CODES.has(cityTail[1])) return [place];
+    }
+    return code === 'us' ? [parts.slice(0, -1).join(',')] : [];
   });
 }
 

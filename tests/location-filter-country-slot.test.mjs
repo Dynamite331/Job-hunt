@@ -31,6 +31,10 @@ test('each place in a joined location gets its own country-code check', () => {
   assert.equal(filter('Austin TX, US'), true);
   assert.equal(filter('Austin TX · Toronto, ON, CA'), true, 'a US state in an earlier place still passes');
   assert.equal(filter('Austin TX; Toronto, Canada'), true);
+  assert.equal(filter('Santa Fe, NM; Toronto, Canada'), true, 'a two-letter word in the city is not a state');
+  const perth = buildLocationFilter({ always_allow: ['united states'], block: ['perth'] });
+  assert.equal(perth('Perth WA, AU'), false, 'a foreign country slot rules out a US state');
+  assert.equal(perth('Perth WA, AU; Remote'), false);
   assert.equal(filter('Dublin, OH'), true, 'City, ST is not a country slot');
 });
 
