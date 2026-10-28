@@ -1,6 +1,8 @@
 // Desktop chrome must stay in the sidebar column. At 1440x900 the version
 // pill and the Ask button used to sit on the main column: the pill crossed
 // out of the 240px sidebar, and Ask covered the bottom-right of the page.
+// On short desktop windows the sidebar has no free space at its foot, so Ask
+// must stay off its links and controls there.
 // Set CHROME_OVERLAP_TEST_URL to a local server. npm test skips this.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -60,4 +62,34 @@ test("version pill and Ask stay out of the main column at 1440x900", {
   assert.equal(hits.left.includes("Report a bug"), false, `bottom of the main column hit ${hits.left}`);
   assert.equal(hits.right.includes("Ask the assistant"), false, `bottom-right of the viewport hit ${hits.right}`);
   assert.deepEqual(errors, []);
+});
+
+test("Ask stays off the sidebar's links and controls at short and tall desktop heights", {
+  skip: liveServerSkip("CHROME_OVERLAP_TEST_URL"),
+  timeout: 120_000,
+}, async (t) => {
+  const origin = new URL(url);
+  assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname));
+  const { chromium } = await import("playwright-core");
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  t.after(() => browser.close());
+  for (const height of [480, 560, 720, 900]) {
+    const page = await browser.newPage({ viewport: { width: 1280, height } });
+    await page.goto(`${origin.origin}/`, { waitUntil: "domcontentloaded" });
+    const ask = page.getByRole("button", { name: "Ask the assistant", exact: true });
+    const sidebar = page.getByRole("complementary").filter({ has: page.getByRole("navigation") });
+    await ask.waitFor();
+    await sidebar.getByRole("button", { name: "Dark mode" }).waitFor();
+
+    const askBox = await ask.boundingBox();
+    assert.ok(askBox);
+    const controls = await sidebar.locator("a, button").all();
+    assert.ok(controls.length >= 5, `only ${controls.length} sidebar controls found`);
+    for (const control of controls) {
+      const box = await control.boundingBox();
+      const name = (await control.getAttribute("aria-label")) || (await control.innerText()).trim();
+      assert.equal(overlapSize(askBox, box), null, `Ask covers sidebar control "${name}" at 1280x${height}`);
+    }
+    await page.close();
+  }
 });
