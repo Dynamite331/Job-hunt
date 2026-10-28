@@ -83,6 +83,18 @@ test("a range with months on both ends is a role", () => {
   assert.equal(cvReadiness("Floor lead, Northwind Market\nSept. 2019 — Present").scoreable, true);
 });
 
+test("Current ends a range like Present does", () => {
+  assert.equal(cvReadiness("Floor lead, Northwind Market\n2020 - Current").scoreable, true);
+  assert.equal(cvReadiness("Floor lead, Northwind Market\nMar 2020 – current").scoreable, true);
+  assert.equal(cvReadiness("Floor lead, Northwind Market\n2020 - currently hiring").scoreable, false);
+});
+
+test("a Skills or Education heading nested under Experience is not a role", () => {
+  assert.equal(cvReadiness("## Experience\n### Skills\nScheduling").scoreable, false);
+  assert.equal(cvReadiness("## Experience\n### Education\nNorthwind Community College").scoreable, false);
+  assert.equal(cvReadiness("## Experience\n### Floor lead, Northwind Market").scoreable, true);
+});
+
 test("a word that only starts with a month name is not a range", () => {
   assert.equal(cvReadiness("Floor lead, Northwind Market\n2020 - marketing 2023").scoreable, false);
   assert.equal(cvReadiness("Floor lead, Northwind Market\n2020 - marzo 2023").scoreable, true);

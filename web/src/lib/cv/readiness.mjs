@@ -10,7 +10,10 @@ const MD_RULE = /^([-*_])(?:\s*\1){2,}$/;
 // The end may carry a month, as in "Jan 2020 – Dec 2023" or "01/2020 - 12/2023".
 const MONTH_NAME = String.raw`septiembre|september|noviembre|november|diciembre|december|february|febrero|january|octubre|october|august|agosto|julio|junio|marzo|march|abril|april|enero|mayo|june|july|sept|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|ene|abr|ago|dic`;
 const END_MONTH = String.raw`(?:(?:${MONTH_NAME})(?![a-z])\.?\s*|(?:0?[1-9]|1[0-2])/)?`;
-const YEAR_RANGE = new RegExp(String.raw`\b((?:19|20)\d\d)\s*[-–—]\s*${END_MONTH}((?:19|20)\d\d|present|now|actualidad)`, "i");
+const YEAR_RANGE = new RegExp(String.raw`\b((?:19|20)\d\d)\s*[-–—]\s*${END_MONTH}((?:19|20)\d\d|present|current|now|actualidad)\b`, "i");
+// A section that can sit under Experience by mistake, as in
+// "## Experience\n### Skills". Its heading is not a role.
+const SECTION_HEADING = /^#+\s*(?:skills|technical\s+skills|technologies|tools|competenc\w*|education|certifications?|languages|projects|summary|profile|interests|awards|references|habilidades|educaci[oó]n|idiomas|certificaciones|proyectos)\b/i;
 
 /** @param {string} text */
 function experienceHeading(text) {
@@ -33,7 +36,7 @@ function experienceHasRole(text) {
       if (!line || MD_RULE.test(line)) continue;
       const sub = /^(#+)\s+\S/.exec(line);
       if (sub) {
-        if (sub[1].length <= level) break;
+        if (sub[1].length <= level || SECTION_HEADING.test(line)) break;
         return true;
       }
       return true;
