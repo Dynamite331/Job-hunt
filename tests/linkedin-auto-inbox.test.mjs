@@ -351,3 +351,22 @@ test('the scheduled inbox poll holds the same lock as the job run', () => {
   const callback = src.slice(lockAt, src.indexOf('timeoutMs:', lockAt));
   assert.match(callback, /if \(!manualJobId\) \{[\s\S]*await pollLinkedInInbox\(/);
 });
+
+test('the scheduled poll logs alert files it had to skip', async () => {
+  const { pollLinkedInInbox } = await import('../lib/linkedin-auto.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'linkedin-auto-skip-'));
+  const dir = join(root, 'data', 'linkedin-alerts');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'big.mbox'), 'x'.repeat(2_000_001));
+  const lines = [];
+  try {
+    await withDataEnv(root, async () => {
+      const report = await pollLinkedInInbox(root, { log: (line) => lines.push(line) });
+      assert.deepEqual(report.drop.skipped, ['big.mbox']);
+    });
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /^linkedin drop: .*too large to read: big\.mbox/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
