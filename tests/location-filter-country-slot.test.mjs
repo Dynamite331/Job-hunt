@@ -36,6 +36,8 @@ test('each place in a joined location gets its own country-code check', () => {
   assert.equal(perth('Perth WA, AU'), false, 'a foreign country slot rules out a US state');
   assert.equal(perth('Perth WA, AU; Remote'), false);
   assert.equal(filter('Dublin, OH'), true, 'City, ST is not a country slot');
+  assert.equal(filter('LA, CA'), true, 'two state codes are a city and a state');
+  assert.equal(filter('LA, CA · Toronto, Canada'), true, 'a US city and state still passes beside a blocked place');
 });
 
 test('US states still rescue City, ST and City, ST, Country forms', () => {

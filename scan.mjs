@@ -505,7 +505,8 @@ function compileUsStateAbbrev(abbr) {
 // ON, CA" as California, so always_allow beat the user's own block entry.
 // A two-letter last part after two or more parts is the country slot. So is
 // the last part of "Austin TX, US" or "Perth WA, AU", where a state code ends
-// the city part. "Santa Fe, NM" and "Dublin, OH" keep their state. A place
+// the city part. "Santa Fe, NM" and "Dublin, OH" keep their state. "LA, CA"
+// is two state codes, so the last part is the state, not a country. A place
 // with a country slot other than US has no US state at all, so "Perth WA, AU"
 // does not read as Washington. Providers join several places with "; "
 // (Lever) or " · " (Jobvite), and each place gets its own check, so the TX in
@@ -520,6 +521,7 @@ function placesWithoutCountryCode(lower) {
     if (parts.length === 2) {
       const cityTail = /(?:^|[^\p{L}\p{M}\p{N}])(\p{L}{2})\s*$/u.exec(parts[0]);
       if (!cityTail || !USPS_CODES.has(cityTail[1])) return [place];
+      if (USPS_CODES.has(code)) return [place];
     }
     return code === 'us' ? [parts.slice(0, -1).join(',')] : [];
   });
