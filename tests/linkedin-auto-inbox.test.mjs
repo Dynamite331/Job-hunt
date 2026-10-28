@@ -173,6 +173,34 @@ test('a base64 MIME part is decoded before its job links are read', async () => 
   }
 });
 
+test('a base64 MIME part with a trailing space on each line is decoded before its job links are read', async () => {
+  const { root, dir } = dropRoot('linkedin-drop-base64-pad-');
+  const html = Buffer.from(`<a href="https://www.linkedin.com/comm/jobs/view/${JOB_ID}?trk=eml">Analyst</a>`).toString('base64');
+  writeFileSync(join(dir, 'alert.eml'), [
+    `From: ${['jobs-noreply', 'linkedin.example'].join('@')}`,
+    'Subject: Jobs for you',
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/alternative; boundary="b1"',
+    '',
+    '--b1',
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    ...html.match(/.{1,76}/g).map((line) => `${line} `),
+    '--b1--',
+    '',
+  ].join('\r\n'));
+  try {
+    await withDataEnv(root, async () => {
+      const result = await importMailDrop({ root, dir });
+      assert.equal(result.added, 1);
+      assert.match(readFileSync(join(root, 'data', 'pipeline.md'), 'utf8'), new RegExp(`https://www.linkedin.com/jobs/view/${JOB_ID}`));
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('an unreadable alert file is reported and the files after it still import', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
   const { root, dir } = dropRoot('linkedin-drop-unreadable-');
   writeFileSync(join(dir, 'a.eml'), 'https://www.linkedin.com/jobs/view/6161616161\n');
