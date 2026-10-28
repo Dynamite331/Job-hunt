@@ -8,7 +8,7 @@ const ROLE_HEADING = /^(#{1,3})\s*(?:work\s+experience|professional\s+experience
 // A markdown rule such as "---" or "* * *" draws a line, not a role.
 const MD_RULE = /^([-*_])(?:\s*\1){2,}$/;
 // The end may carry a month, as in "Jan 2020 – Dec 2023" or "01/2020 - 12/2023".
-const END_MONTH = String.raw`(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|ene|abr|ago|dic)[a-z]*\.?\s*|\d{1,2}/)?`;
+const END_MONTH = String.raw`(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|ene|abr|ago|dic)[a-z]*\.?\s*|(?:0?[1-9]|1[0-2])/)?`;
 const YEAR_RANGE = new RegExp(String.raw`\b((?:19|20)\d\d)\s*[-–—]\s*${END_MONTH}((?:19|20)\d\d|present|now|actualidad)`, "i");
 
 /** @param {string} text */

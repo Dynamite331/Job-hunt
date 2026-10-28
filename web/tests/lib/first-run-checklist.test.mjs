@@ -77,8 +77,15 @@ test("a range that starts before 2000 is a role", () => {
 });
 
 test("a range with months on both ends is a role", () => {
-  for (const range of ["Jan 2020 – Dec 2023", "January 2020 - March 2023", "Sept. 2019 — Present", "01/2020 - 12/2023"]) {
+  for (const range of ["Jan 2020 – Dec 2023", "January 2020 - March 2023", "enero 2020 – diciembre 2023", "01/2020 - 12/2023"]) {
     assert.equal(cvReadiness(`Floor lead, Northwind Market\n${range}`).scoreable, true, range);
+  }
+  assert.equal(cvReadiness("Floor lead, Northwind Market\nSept. 2019 — Present").scoreable, true);
+});
+
+test("a numeric end month outside 1-12 is not a range", () => {
+  for (const range of ["2020 - 99/2023", "2020 - 13/2023", "2020 - 00/2023"]) {
+    assert.equal(cvReadiness(`Floor lead, Northwind Market\n${range}`).scoreable, false, range);
   }
 });
 
