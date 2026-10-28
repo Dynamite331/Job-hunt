@@ -137,6 +137,55 @@ test('an unreadable tracker stops the import instead of adding its jobs again', 
   }
 });
 
+function dropRoot(prefix) {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  const dir = join(root, 'data', 'linkedin-alerts');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(root, 'data', 'pipeline.md'), '# Pipeline\n\n## Pending\n\n## Processed\n');
+  return { root, dir };
+}
+
+test('an unreadable alert file is reported and the files after it still import', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+  const { root, dir } = dropRoot('linkedin-drop-unreadable-');
+  writeFileSync(join(dir, 'a.eml'), 'https://www.linkedin.com/jobs/view/6161616161\n');
+  chmodSync(join(dir, 'a.eml'), 0o000);
+  writeFileSync(join(dir, 'b.eml'), `https://www.linkedin.com/jobs/view/${JOB_ID}\n`);
+  try {
+    await withDataEnv(root, async () => {
+      const result = await importMailDrop({ root, dir });
+      assert.equal(result.added, 1);
+      assert.deepEqual(result.unreadable, ['a.eml']);
+      assert.deepEqual(result.skipped, []);
+      assert.match(result.message, /Could not read a\.eml/);
+      assert.doesNotMatch(result.message, /too large/);
+      assert.ok(existsSync(join(dir, 'a.eml')), 'the unreadable file stays for the next run');
+      assert.match(readFileSync(join(root, 'data', 'pipeline.md'), 'utf8'), new RegExp(JOB_ID));
+      const { pollLinkedInInbox } = await import('../lib/linkedin-auto.mjs');
+      const lines = [];
+      await pollLinkedInInbox(root, { log: (line) => lines.push(line) });
+      assert.match(lines.join('\n'), /^linkedin drop: .*Could not read a\.eml/, 'the scheduled poll logs it too');
+    });
+  } finally {
+    chmodSync(join(dir, 'a.eml'), 0o600);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('two imports of the same folder at once add each job once', async () => {
+  const { root, dir } = dropRoot('linkedin-drop-overlap-');
+  writeFileSync(join(dir, 'alert.eml'), `https://www.linkedin.com/jobs/view/${JOB_ID}\n`);
+  try {
+    await withDataEnv(root, async () => {
+      const results = await Promise.all([importMailDrop({ root, dir }), importMailDrop({ root, dir })]);
+      assert.deepEqual(results.map((r) => r.added).sort(), [0, 1]);
+      const rows = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8').split(JOB_ID).length - 1;
+      assert.equal(rows, 1, 'one pipeline row');
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('client and server errors from the token endpoint do not send you to sign in again', () => {
   const client = gmailRefreshAdvice(401, JSON.stringify({ error: 'invalid_client' }));
   assert.equal(client.ok, false);
