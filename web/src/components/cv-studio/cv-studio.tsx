@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, FileText, Loader2, RotateCcw } from "lucide-react";
+import { ArrowLeft, Check, FileText, Loader2, RotateCcw, Undo2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { arrange, renderBlocks, type BlockTree } from "@/lib/cv-studio/html-blocks.mjs";
 import { emptyEdits, resolveStudio, studioReducer, type StudioAction, type StudioDoc, type StudioEdits } from "@/lib/cv-studio/studio.mjs";
@@ -21,6 +21,7 @@ const REASONS: Record<string, { title: string; body: string }> = {
 };
 
 const STALE = "This CV was regenerated in another tab. Reload the Studio.";
+const UNDO_LIMIT = 30;
 const SAVE_ERRORS: Record<string, string> = { stale: STALE, busy: "This CV is already being saved. Wait for that save to finish." };
 
 export function CvStudio({ n }: { n: string }) {
@@ -55,7 +56,22 @@ export function CvStudio({ n }: { n: string }) {
 
 function Studio({ n, data }: { n: string; data: Loaded }) {
   const { doc, tree } = data;
-  const [edits, dispatch] = useReducer((e: StudioEdits, a: StudioAction) => studioReducer(e, a, doc), data.edits);
+  const [edits, dispatchEdit] = useReducer((e: StudioEdits, a: StudioAction) => studioReducer(e, a, doc), data.edits);
+  const history = useRef<StudioEdits[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const recordEdit = useCallback((action: StudioAction) => {
+    const next = studioReducer(edits, action, doc);
+    if (next === edits) return;
+    history.current = [...history.current, edits].slice(-UNDO_LIMIT);
+    setCanUndo(true);
+    dispatchEdit(action);
+  }, [doc, edits]);
+  const undo = useCallback(() => {
+    const prev = history.current.pop();
+    setCanUndo(history.current.length > 0);
+    if (!prev) return;
+    dispatchEdit({ type: "replace", edits: prev });
+  }, []);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const resolved = useMemo(() => resolveStudio(doc, edits), [doc, edits]);
@@ -99,6 +115,18 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
     }
   }, [edits, send]);
 
+  useEffect(() => {
+    const undoShortcut = (event: KeyboardEvent) => {
+      if (event.key !== "z" || event.shiftKey || !(event.metaKey || event.ctrlKey)) return;
+      const target = event.target;
+      if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+      event.preventDefault();
+      undo();
+    };
+    window.addEventListener("keydown", undoShortcut);
+    return () => window.removeEventListener("keydown", undoShortcut);
+  }, [undo]);
+
   const changed = doc.sections.flatMap((s) => s.items.flatMap((i) => i.bullets)).filter((b) => b.change !== "same").length;
 
   return (
@@ -112,9 +140,12 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Segmented label="Length" value={edits.preset.length} options={[["full", "Full"], ["one-page", "One page"]]} onChange={(v) => dispatch({ type: "preset", preset: { length: v as "full" | "one-page" } })} />
-          <Segmented label="Tone" value={edits.preset.tone} options={[["tailored", "Tailored"], ["conservative", "Conservative"]]} onChange={(v) => dispatch({ type: "preset", preset: { tone: v as "tailored" | "conservative" } })} />
-          <button onClick={() => dispatch({ type: "reset" })} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-brand">
+          <Segmented label="Length" value={edits.preset.length} options={[["full", "Full"], ["one-page", "One page"]]} onChange={(v) => recordEdit({ type: "preset", preset: { length: v as "full" | "one-page" } })} />
+          <Segmented label="Tone" value={edits.preset.tone} options={[["tailored", "Tailored"], ["conservative", "Conservative"]]} onChange={(v) => recordEdit({ type: "preset", preset: { tone: v as "tailored" | "conservative" } })} />
+          <button type="button" onClick={undo} disabled={!canUndo} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-brand disabled:opacity-40">
+            <Undo2 className="size-3.5" /> Undo
+          </button>
+          <button onClick={() => recordEdit({ type: "reset" })} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-brand">
             <RotateCcw className="size-3.5" /> Reset
           </button>
           <button
@@ -153,7 +184,7 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
         <div className="space-y-4">
           <CoverageMeter coverage={resolved.coverage} dropped={dropped} />
           {arrange(doc.sections, edits.order.root).map((s, k, all) => (
-            <SectionCard key={s.id} n={n} section={s} edits={edits} hidden={resolved.view.hidden} dispatch={dispatch} siblings={all.map((x) => x.id)} first={k === 0} last={k === all.length - 1} />
+            <SectionCard key={s.id} n={n} section={s} edits={edits} hidden={resolved.view.hidden} dispatch={recordEdit} siblings={all.map((x) => x.id)} first={k === 0} last={k === all.length - 1} />
           ))}
         </div>
         <div className="lg:sticky lg:top-4 lg:self-start">

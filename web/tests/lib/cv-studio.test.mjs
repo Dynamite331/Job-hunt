@@ -130,6 +130,14 @@ test("each bullet knows its original, its change, and the keywords that drove it
   assert.equal(doc.sections[0].items[0].bullets[0].base, "Full-stack AI engineer building production ML systems.");
 });
 
+test("undo puts back the edits from before a hide", () => {
+  const { doc } = studio();
+  const before = emptyEdits("h1");
+  const hidden = studioReducer(before, { type: "toggle", id: "s2i0b2" }, doc);
+  assert.ok(hidden.hidden.includes("s2i0b2"));
+  assert.deepEqual(studioReducer(hidden, { type: "replace", edits: before }, doc), before);
+});
+
 test("using the original wording, hiding, and restoring change the render and the coverage", () => {
   const { tree, doc } = studio();
   let edits = emptyEdits("h1");

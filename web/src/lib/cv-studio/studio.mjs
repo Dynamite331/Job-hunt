@@ -172,7 +172,8 @@ export function parseEdits(raw, sourceHash) {
  *   | {type: "restore", item: string, index: number}
  *   | {type: "unrestore", item: string, index: number}
  *   | {type: "preset", preset: Partial<Preset>}
- *   | {type: "reset"}} StudioAction
+ *   | {type: "reset"}
+ *   | {type: "replace", edits: StudioEdits}} StudioAction
  */
 
 /**
@@ -211,6 +212,8 @@ export function studioReducer(edits, action, doc) {
       return { ...edits, preset: { ...edits.preset, ...action.preset } };
     case "reset":
       return emptyEdits(edits.sourceHash);
+    case "replace":
+      return action.edits;
   }
 }
 
