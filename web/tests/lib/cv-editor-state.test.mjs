@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { draftToStore, editorReducer, editorStatus, initialEditor, shouldSave } from "../../src/lib/cv-editor-state.mjs";
+import { draftChange, draftToStore, editorReducer, editorStatus, initialEditor, shouldSave } from "../../src/lib/cv-editor-state.mjs";
 
 const ready = (content, extra = {}) => ({
   ...initialEditor(),
@@ -44,6 +44,22 @@ test("a failed save stays unsaved and names the error", () => {
   assert.equal(editorStatus(state).canSave, true);
   assert.equal(state.error, "write failed");
   assert.equal(state.inflight, null);
+});
+
+test("a failed save does not autosave again until the next edit", () => {
+  let state = editorReducer(ready("one"), { type: "edit", content: "one two" });
+  state = editorReducer(state, { type: "save-start", content: "one two" });
+  state = editorReducer(state, { type: "save-failed", content: "one two", error: "write failed" });
+  assert.equal(shouldSave(state), false);
+  state = editorReducer(state, { type: "edit", content: "one two three" });
+  assert.equal(shouldSave(state), true);
+});
+
+test("a failed load leaves the stored draft alone, and a saved CV clears it", () => {
+  assert.equal(draftChange(initialEditor()), undefined);
+  assert.equal(draftChange(editorReducer(initialEditor(), { type: "load-failed", error: "The CV could not be loaded." })), undefined);
+  assert.equal(draftChange(ready("one")), null);
+  assert.deepEqual(draftChange(ready("one two", { saved: "one" })), { base: "one", content: "one two" });
 });
 
 test("a draft written on top of the file comes back, and a draft for an older file does not", () => {

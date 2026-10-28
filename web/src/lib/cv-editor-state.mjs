@@ -96,9 +96,28 @@ export function editorStatus(state) {
   return { label: "Saved", canSave: false };
 }
 
-/** @param {EditorState} state */
+/**
+ * Whether autosave should run. Not after a failed save: retrying on a timer
+ * would repeat the POST, and its backup, until the next keystroke. Typing
+ * clears the error, and the Save button and the exit flush still work.
+ *
+ * @param {EditorState} state
+ */
 export function shouldSave(state) {
-  return state.phase === "ready" && state.content !== state.saved && state.inflight !== state.content;
+  return state.phase === "ready" && state.error === null && state.content !== state.saved && state.inflight !== state.content;
+}
+
+/**
+ * What to do with the stored draft. Undefined leaves it alone: until the CV
+ * has loaded there is nothing to compare it with, and a failed load must not
+ * erase the draft the next reload would restore. Null removes it.
+ *
+ * @param {EditorState} state
+ * @returns {CvDraft | undefined}
+ */
+export function draftChange(state) {
+  if (state.phase !== "ready") return undefined;
+  return draftToStore(state);
 }
 
 /** @param {EditorState} state @returns {CvDraft} */

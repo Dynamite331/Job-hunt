@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
-  draftToStore,
+  draftChange,
   editorReducer,
   editorStatus,
   initialEditor,
@@ -123,9 +123,9 @@ export function CvEditor() {
   }, []);
 
   useEffect(() => {
-    if (state.phase === "loading") return;
+    const draft = draftChange(state);
+    if (draft === undefined) return;
     try {
-      const draft = draftToStore(state);
       if (!draft) sessionStorage.removeItem(DRAFT_KEY);
       else sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     } catch (error) {
