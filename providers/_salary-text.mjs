@@ -49,6 +49,16 @@ function canonicalizeSeparators(numStr) {
 const ISO_4217_CODES = new Set(Intl.supportedValuesOf('currency'));
 
 /**
+ * Whether a token is an ISO-4217 currency code, in any case ("USD", "eur").
+ *
+ * @param {unknown} token
+ * @returns {boolean}
+ */
+export function isCurrencyCode(token) {
+  return ISO_4217_CODES.has(String(token ?? '').toUpperCase());
+}
+
+/**
  * Parse a written amount or range into numbers. Annual suffixes and currency
  * tokens are stripped, never interpreted: the currency is the caller's to
  * read, and a non-annual period ("/hr", "per month") leaves the string
@@ -60,6 +70,11 @@ const ISO_4217_CODES = new Set(Intl.supportedValuesOf('currency'));
 export function parseAmount(raw) {
   let s = String(raw ?? '').trim();
   if (!s || s === '?' || s === '-' || /^(n\/?a|null)$/i.test(s)) return null;
+  // Decided on the whole string, before any label, bullet suffix or note is
+  // cut away: "Monthly salary: 5,000 USD" and "5,000 USD • per month" lose
+  // their period with the text around the number, and would read as annual.
+  const period = compensationPeriod(s);
+  if (period && period !== 'annual') return null;
   // Strings copied verbatim from a JD carry a leading label ("Annual Salary
   // Range: $165,000 - $190,000") and a trailing bullet suffix ("$204.4K -
   // $352K • Offers Equity"). Both are dropped before anything below reads the
@@ -70,13 +85,9 @@ export function parseAmount(raw) {
   const labelColon = firstDigit === -1 ? -1 : s.lastIndexOf(':', firstDigit);
   if (labelColon !== -1) s = s.slice(labelColon + 1).trim();
   s = s.split('•')[0].trim();
-  // A trailing parenthetical note carries no figure ("(note: negotiable)",
-  // "(Spain)"), unless it names a non-annual period ("(per month)"): that one
-  // stays, so the string fails closed instead of yielding a monthly figure.
-  s = s.replace(/\s*\(([^()\d]*)\)\s*$/, (note, inner) => {
-    const period = compensationPeriod(inner);
-    return period && period !== 'annual' ? note : '';
-  }).trim();
+  // A trailing parenthetical with no digits is a note ("(note: negotiable)",
+  // "(Spain)"), never part of the figure.
+  s = s.replace(/\s*\([^()\d]*\)\s*$/, '').trim();
   // Keep period recognition separate from amount parsing, but allow an explicit
   // annual suffix to coexist with the numeric value.
   // It may appear on either side of a trailing currency token ("60k CAD per
@@ -92,7 +103,7 @@ export function parseAmount(raw) {
   // salary data. A three-letter token also never eats the lone "k" magnitude
   // suffix ("80k").
   s = s.replace(/[€$£¥]/g, '')
-    .replace(/\s*([A-Za-z]{3})\s*$/, (token, code) => (ISO_4217_CODES.has(code.toUpperCase()) ? '' : token))
+    .replace(/\s*([A-Za-z]{3})\s*$/, (token, code) => (isCurrencyCode(code) ? '' : token))
     .trim();
   s = stripAnnual(s);
   const toNum = (numStr, kFlag) => {
@@ -119,12 +130,14 @@ export function parseAmount(raw) {
  * The pay period a compensation string names, or null when it names none.
  *
  * @param {unknown} raw
- * @returns {'annual' | 'monthly' | 'hourly' | null}
+ * @returns {'annual' | 'monthly' | 'weekly' | 'daily' | 'hourly' | null}
  */
 export function compensationPeriod(raw) {
   const value = String(raw ?? '');
   if (/(?:\/\s*(?:year|yr)\b|\bper\s+(?:year|annum)\b|\bannual(?:ly)?\b|\byearly\b)/i.test(value)) return 'annual';
   if (/(?:\/\s*(?:month|mo)\b|\bper\s+month\b|\bmonthly\b)/i.test(value)) return 'monthly';
+  if (/(?:\/\s*(?:week|wk)\b|\bper\s+week\b|\bweekly\b)/i.test(value)) return 'weekly';
+  if (/(?:\/\s*day\b|\bper\s+day\b|\bdaily\b)/i.test(value)) return 'daily';
   if (/(?:\/\s*(?:hour|hr)\b|\bper\s+hour\b|\bhourly\b)/i.test(value)) return 'hourly';
   return null;
 }
