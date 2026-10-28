@@ -176,6 +176,7 @@ test('doctor tells you to paste an alert and skip Google', () => {
   assert.match(LINKEDIN_DOCTOR_LABEL, /node linkedin-import\.mjs/);
   assert.match(LINKEDIN_DOCTOR_LABEL, /No Google account/);
   assert.match(linkedInPluginFix('gmail'), /skip Google setup/);
+  assert.equal(linkedInPluginFix('linkedin-alerts'), null);
   assert.equal(linkedInPluginFix('notion'), null);
 });
 
