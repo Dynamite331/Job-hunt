@@ -423,16 +423,25 @@ function linkedReportFile(app: { report?: string } | undefined, root: string): s
  *  suppression reads its `**URL:**` (lib/whats-new-suppression.mjs). Link
  *  only, never findReportFile's number fallback: row and report numbers drift
  *  apart (#1733), and a guessed report would hand the row another posting's
- *  URL. A read failure is null too, which there means "URL unknown" and falls
- *  back to the company + role match. */
+ *  URL. Null (no link, or the report is missing) means "URL unknown" there and
+ *  falls back to the company + role match. Any other read failure throws: a
+ *  report that exists but cannot be read is broken, and reading it as unknown
+ *  would hide a second posting with the same title with no signal. */
 export function readLinkedReport(app: { report?: string }): string | null {
-  const file = linkedReportFile(app, careerOpsRoot());
+  const root = careerOpsRoot();
+  const file = linkedReportFile(app, root);
   if (!file) return null;
   try {
     // Reports live in the user's runtime checkout, outside the web build graph.
     return fs.readFileSync(/* turbopackIgnore: true */ file, "utf8");
-  } catch {
-    return null;
+  } catch (err) {
+    // Deleted since linkedReportFile resolved it: missing, so unknown.
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    // EISDIR's message names no file, so name it here.
+    throw new Error(
+      `report ${path.relative(root, file)} could not be read: ${(err as Error)?.message ?? "unknown error"}`,
+      { cause: err },
+    );
   }
 }
 

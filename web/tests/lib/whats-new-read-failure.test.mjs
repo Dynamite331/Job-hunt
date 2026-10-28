@@ -114,6 +114,59 @@ test("the dashboard rejects the failure response", () => {
   assert.equal(ok, false, "r.ok must be false, or refetch() treats a broken file as fresh data");
 });
 
+// collectWhatsNew skips line 1 as the header, so a history without one is
+// never walked and every case below would pass on an empty week.
+const HISTORY_HEADER = "url\tfirst_seen\tportal\ttitle\tcompany\tstatus\tlocation\n";
+
+test("a linked report that cannot be read is reported, not read as URL-unknown", () => {
+  // The report's `**URL:**` decides whether a second posting with the same
+  // company and title is shown (#5684). A report that exists but cannot be
+  // read is broken, not absent: treating it as "URL unknown" falls back to
+  // company + role and hides that posting with no signal. Same EISDIR setup
+  // as the history test above.
+  const today = new Date().toISOString().slice(0, 10);
+  const res = callRoute(makeRoot((dir) => {
+    mkdirSync(join(dir, "reports", "001-acme-2026-10-01.md"), { recursive: true });
+    writeFileSync(join(dir, "data", "applications.md"), [
+      "| # | Date | Company | Role | Score | Status | PDF | Report | Notes |",
+      "|---|---|---|---|---|---|---|---|---|",
+      "| 1 | 2026-10-01 | Acme | Staff Engineer | 4.1/5 | Evaluated | | [1](../reports/001-acme-2026-10-01.md) | |",
+    ].join("\n"));
+    writeFileSync(
+      join(dir, "data", "scan-history.tsv"),
+      `${HISTORY_HEADER}https://boards.greenhouse.io/acme/jobs/2002\t${today}\tgreenhouse\tStaff Engineer\tAcme\tadded\tRemote\n`,
+    );
+  }));
+
+  assert.equal(res.status, 500);
+  assert.match(res.body.error ?? "", /001-acme-2026-10-01\.md could not be read/);
+  assert.match(res.body.error ?? "", /EISDIR/);
+  assert.deepEqual(res.body.offers, []);
+  assert.equal(res.body.count, 0);
+});
+
+test("a linked report that does not exist still reads as URL-unknown", () => {
+  // A missing report is "no URL to go on", not a broken one: the link does not
+  // resolve, the row falls back to company + role, the scan row is hidden, and
+  // the answer is an empty 200.
+  const today = new Date().toISOString().slice(0, 10);
+  const res = callRoute(makeRoot((dir) => {
+    mkdirSync(join(dir, "reports"), { recursive: true });
+    writeFileSync(join(dir, "data", "applications.md"), [
+      "| # | Date | Company | Role | Score | Status | PDF | Report | Notes |",
+      "|---|---|---|---|---|---|---|---|---|",
+      "| 1 | 2026-10-01 | Acme | Staff Engineer | 4.1/5 | Evaluated | | [1](../reports/001-acme-2026-10-01.md) | |",
+    ].join("\n"));
+    writeFileSync(
+      join(dir, "data", "scan-history.tsv"),
+      `${HISTORY_HEADER}https://boards.greenhouse.io/acme/jobs/2002\t${today}\tgreenhouse\tStaff Engineer\tAcme\tadded\tRemote\n`,
+    );
+  }));
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { offers: [], count: 0 });
+});
+
 process.on("exit", () => {
   for (const dir of roots) rmSync(dir, { recursive: true, force: true });
 });

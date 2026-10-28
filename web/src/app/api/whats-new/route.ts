@@ -73,6 +73,16 @@ export async function GET(req: Request) {
     };
   };
 
-  const { offers, count } = collectWhatsNew(rows, { cutoff, toOffer, offerLimit });
-  return Response.json({ offers, count });
+  // Same rule as the scan history above, for the linked reports: a missing one
+  // is "URL unknown", any other read failure throws from readLinkedReport. The
+  // reads are lazy, inside toOffer, so they surface here.
+  try {
+    const { offers, count } = collectWhatsNew(rows, { cutoff, toOffer, offerLimit });
+    return Response.json({ offers, count });
+  } catch (err) {
+    return Response.json(
+      { error: (err as Error)?.message ?? "unknown error", offers: [], count: 0 },
+      { status: 500 },
+    );
+  }
 }
