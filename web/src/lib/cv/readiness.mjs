@@ -4,7 +4,7 @@
 
 /** @typedef {{ scoreable: boolean; words: number; hasExperience: boolean; hasSkills: boolean; hint?: string }} CvReadiness */
 
-const ROLE_HEADING = /^(#{1,3})\s*(?:work\s+experience|professional\s+experience|experience|work|employment|empleo|experiencia)\s*$/i;
+const ROLE_HEADING = /^(#{1,3})\s*(?:work\s+experience|professional\s+experience|experience|work|employment|empleo|experiencia)\s*:?\s*#*\s*$/i;
 const YEAR_RANGE = /\b(20\d\d)\s*[-–—]\s*(20\d\d|present|now|actualidad)/i;
 
 /** @param {string} text */

@@ -55,6 +55,10 @@ test("work authorization is not a role, and a subheading under experience is", (
   const sub = cvReadiness("## Experience\n### Floor lead, Northwind Market");
   assert.equal(sub.scoreable, true);
   assert.equal(cvReadiness("## Work Experience\nFloor lead, Northwind Market").scoreable, true);
+  for (const heading of ["## Experience:", "## Experience ##", "## Experience: ##"]) {
+    assert.equal(cvReadiness(`${heading}\nFloor lead, Northwind Market`).scoreable, true, heading);
+  }
+  assert.equal(cvReadiness("## Work Authorization:\nAuthorized to work").scoreable, false);
 });
 
 const SECTIONS = [
