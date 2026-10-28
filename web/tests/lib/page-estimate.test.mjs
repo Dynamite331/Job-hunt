@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { contentHeightPx, previewPageCount, PREVIEW_PAGE_PX } from "../../src/lib/cv-studio/page-estimate.mjs";
+import { contentHeightPx, frameHeightPx, previewPageCount, PREVIEW_PAGE_PX } from "../../src/lib/cv-studio/page-estimate.mjs";
 
 function doc({ content, viewport }) {
   return {
@@ -47,6 +47,22 @@ test("sibling .page boxes are measured from the first one's top to the last one'
   };
   assert.equal(contentHeightPx(twoPages), 1916);
   assert.equal(previewPageCount(contentHeightPx(twoPages)), 2);
+});
+
+test("the iframe includes the margin above the page and the page count does not", () => {
+  const page = (top, height) => ({ scrollHeight: height, getBoundingClientRect: () => ({ top, height }) });
+  const pages = [page(8, 1048)];
+  const one = {
+    body: {
+      scrollHeight: 1048,
+      querySelector: () => pages[0],
+      querySelectorAll: () => pages,
+    },
+  };
+  assert.equal(contentHeightPx(one), 1048);
+  assert.equal(frameHeightPx(one), 1056);
+  assert.equal(previewPageCount(contentHeightPx(one)), 1);
+  assert.equal(frameHeightPx(null), 0);
 });
 
 test("an unmeasured preview estimates one page", () => {

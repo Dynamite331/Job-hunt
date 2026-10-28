@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { contentHeightPx, PREVIEW_PAGE_PX, previewPageCount } from "@/lib/cv-studio/page-estimate.mjs";
+import { contentHeightPx, frameHeightPx, PREVIEW_PAGE_PX, previewPageCount } from "@/lib/cv-studio/page-estimate.mjs";
 
 const PAGE_WIDTH = 816;
 
@@ -10,6 +10,7 @@ export function CvPreview({ html }: { html: string }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(0.7);
   const [contentPx, setContentPx] = useState(0);
+  const [framePx, setFramePx] = useState(0);
 
   useEffect(() => {
     const el = box.current;
@@ -20,11 +21,19 @@ export function CvPreview({ html }: { html: string }) {
   }, []);
 
   const measure = () => {
-    const next = contentHeightPx(frame.current?.contentDocument);
-    if (next > 0) setContentPx(next);
+    const frameEl = frame.current;
+    const doc = frameEl?.contentDocument;
+    if (!frameEl || !doc) return;
+    // A .page rule of min-height: 100vh follows this iframe. Measuring at the
+    // previous content height makes the next load taller. One page is stable.
+    frameEl.style.height = `${PREVIEW_PAGE_PX}px`;
+    const content = contentHeightPx(doc);
+    const nextFrame = frameHeightPx(doc);
+    if (content > 0) setContentPx(content);
+    if (nextFrame > 0) setFramePx(nextFrame);
   };
 
-  const frameHeight = contentPx > 0 ? contentPx : PREVIEW_PAGE_PX;
+  const frameHeight = framePx > 0 ? framePx : PREVIEW_PAGE_PX;
   const pages = previewPageCount(contentPx);
 
   return (

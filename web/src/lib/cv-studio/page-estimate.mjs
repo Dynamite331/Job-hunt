@@ -1,6 +1,18 @@
 // One US Letter page in the preview iframe, at 96px per inch.
 export const PREVIEW_PAGE_PX = 1056;
 
+function pageBoxes(body) {
+  if (!body || typeof body.querySelectorAll !== "function") return [];
+  return [...body.querySelectorAll(".page")];
+}
+
+function placed(el) {
+  const rect = typeof el.getBoundingClientRect === "function" ? el.getBoundingClientRect() : null;
+  const top = rect && Number.isFinite(rect.top) ? rect.top : 0;
+  const height = Math.max(rect?.height || 0, el.scrollHeight || 0, el.offsetHeight || 0);
+  return { top, bottom: top + height };
+}
+
 /**
  * Height of the CV content.
  *
@@ -15,19 +27,30 @@ export function contentHeightPx(doc) {
   const body = doc?.body;
   if (!body) return 0;
   // A user template can lay its CV out as several sibling .page boxes.
-  // Measure from the top of the first to the bottom of the last.
-  const pages = typeof body.querySelectorAll === "function" ? [...body.querySelectorAll(".page")] : [];
+  // The page count is the distance from the first box to the last, so a
+  // margin above the first page does not add a page.
+  const pages = pageBoxes(body);
   if (pages.length > 1) {
-    const boxes = pages.map((p) => {
-      const rect = p.getBoundingClientRect();
-      return { top: rect.top, bottom: rect.top + Math.max(rect.height, p.scrollHeight || 0) };
-    });
+    const boxes = pages.map(placed);
     const extent = Math.max(...boxes.map((b) => b.bottom)) - Math.min(...boxes.map((b) => b.top));
     return extent > 0 ? extent : 0;
   }
-  const page = typeof body.querySelector === "function" ? body.querySelector(".page") : null;
+  const page = pages[0] || (typeof body.querySelector === "function" ? body.querySelector(".page") : null);
   const box = page || body;
   const height = box.scrollHeight || box.offsetHeight || 0;
+  return height > 0 ? height : 0;
+}
+
+/** Iframe height. Includes the offset above the first page so the margin is not clipped. */
+export function frameHeightPx(doc) {
+  const body = doc?.body;
+  if (!body) return 0;
+  const pages = pageBoxes(body);
+  if (pages.length > 0) {
+    const bottom = Math.max(...pages.map((page) => placed(page).bottom));
+    return bottom > 0 ? bottom : 0;
+  }
+  const height = body.scrollHeight || body.offsetHeight || 0;
   return height > 0 ? height : 0;
 }
 
