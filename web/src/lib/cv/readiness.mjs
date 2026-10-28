@@ -13,7 +13,7 @@ const END_MONTH = String.raw`(?:(?:${MONTH_NAME})(?![a-z])\.?\s*|(?:0?[1-9]|1[0-
 const YEAR_RANGE = new RegExp(String.raw`\b((?:19|20)\d\d)\s*[-–—]\s*${END_MONTH}((?:19|20)\d\d|present|current|now|actualidad)\b`, "i");
 // A section that can sit under Experience by mistake, as in
 // "## Experience\n### Skills". Its heading is not a role.
-const SECTION_HEADING = /^#+\s*(?:skills|technical\s+skills|technologies|tools|competenc\w*|education|certifications?|languages|projects|summary|profile|interests|awards|references|habilidades|educaci[oó]n|idiomas|certificaciones|proyectos)\b/i;
+const SECTION_HEADING = /^#+\s*(?:skills|technical\s+skills|technologies|tools|competenc\w*|education|certifications?|languages|projects|summary|profile|interests|awards|references|habilidades|educaci[oó]n|idiomas|certificaciones|proyectos)\s*:?\s*#*\s*$/i;
 
 /** @param {string} text */
 function experienceHeading(text) {

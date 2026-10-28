@@ -93,6 +93,7 @@ test("a Skills or Education heading nested under Experience is not a role", () =
   assert.equal(cvReadiness("## Experience\n### Skills\nScheduling").scoreable, false);
   assert.equal(cvReadiness("## Experience\n### Education\nNorthwind Community College").scoreable, false);
   assert.equal(cvReadiness("## Experience\n### Floor lead, Northwind Market").scoreable, true);
+  assert.equal(cvReadiness("## Experience\n### Education Program Manager\nNorthwind Market").scoreable, true);
 });
 
 test("a word that only starts with a month name is not a range", () => {
