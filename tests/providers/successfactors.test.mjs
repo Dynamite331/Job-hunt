@@ -248,9 +248,10 @@ try {
   else fail('cleanCsbLocation should return "" for missing/empty input');
 
   // The jobs API appends a trailing comma ("City, Region, Country, ").
-  // clean() trims whitespace and leaves the comma, which is what the user sees.
+  // clean() alone would keep it, so cleanCsbLocation trims it after clean().
   // Interior commas and a trailing postal code stay.
   const commaCases = [
+    [['Karlovy Vary, CZE, 36004,'], 'Karlovy Vary, CZE, 36004'],
     [['Bend, OR, USA, '], 'Bend, OR, USA'],
     [['Oslo, NOR,'], 'Oslo, NOR'],
     [['Columbus, OH, USA,<br/>'], 'Columbus, OH, USA'],
@@ -281,9 +282,9 @@ try {
   else fail(`parseCsbJobs url wrong: ${JSON.stringify(c1 && c1.url)}`);
   if (c1 && c1.location === 'Anyang, KOR, 14058') pass('parseCsbJobs cleans jobLocationShort');
   else fail(`parseCsbJobs location wrong: ${JSON.stringify(c1 && c1.location)}`);
-  // A trailing comma is a location artifact. The same character in a title
-  // must survive, because titles go through clean() and locations do not
-  // share that trim.
+  // A trailing comma is a location artifact. A title can end in a comma for
+  // real, and titles get only clean(), so the comma trim in cleanCsbLocation
+  // must not reach them.
   const commaParsed = parseCsbJobs({
     jobSearchResult: [{
       response: {
