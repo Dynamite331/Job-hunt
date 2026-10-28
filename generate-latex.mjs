@@ -312,6 +312,7 @@ export async function runLatexFactGate(content, { root = getCareerOpsRoot(), ext
   // Imported lazily, as generate-pdf.mjs does: a test that copies this script
   // alone into a temp workspace has no cv.md and never reaches the import.
   const { assertFacts } = await import('./verify-cv-facts.mjs');
+  const { voiceIssues, voiceTellMessage } = await import('./cv-voice.mjs');
   // An explicit --source that does not exist is a mistyped path, not an empty
   // source. Read as empty, it would leave the claims it was passed to back
   // unsupported and blame the CV instead of the path.
@@ -319,6 +320,13 @@ export async function runLatexFactGate(content, { root = getCareerOpsRoot(), ext
   const missing = extraPaths.filter(p => !existsSync(p));
   if (missing.length) return { verdict: 'block', reason: `--source file not found: ${missing.join(', ')}` };
   const sourcePaths = [cvPath, join(root, 'article-digest.md'), ...extraPaths];
+  let source = '';
+  for (const sourcePath of sourcePaths) {
+    if (!existsSync(sourcePath)) continue;
+    source += `\n${await readFile(sourcePath, 'utf-8')}`;
+  }
+  const voiceError = voiceTellMessage(voiceIssues(content, source), label);
+  if (voiceError) return { verdict: 'block', reason: voiceError };
   try {
     const result = assertFacts(content, { sourcePaths, configPath: join(root, 'config', 'cv-facts.json'), label });
     return { verdict: result.verdict, result };

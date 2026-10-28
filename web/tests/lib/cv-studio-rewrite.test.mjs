@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { buildRewritePrompt, parseRewrite, rewriteGate, unsupportedClaims } from "../../src/lib/cv-studio/rewrite.mjs";
+import { voiceIssues } from "../../../cv-voice.mjs";
 import { fencingReport } from "../../src/lib/cli-fencing.mjs";
 import { CAPS } from "../../src/lib/worker-capabilities.mjs";
 import { auditClaims, verifyFacts } from "../../../verify-cv-facts.mjs";
@@ -39,6 +40,20 @@ test("a metric from another bullet in cv.md is not supported in this one", () =>
   const opts = { sourcePaths: [path.join(dir, "cv.md")], configPath: path.join(dir, "cv-facts.json") };
   const text = "Cut deployment time from 2 weeks to 4 hours and cloud spend by 37% with CI/CD";
   assert.deepEqual(unsupportedClaims(verifyFacts(text, opts), auditClaims(text, `${SOURCE.base}\n${SOURCE.tailored}`)), ["37%"]);
+});
+
+test("a rewrite that adds spearheaded is a voice failure and a copied spearheaded is not", () => {
+  const original = "Ran the weekly release train for the payments app";
+  const added = voiceIssues("Spearheaded the weekly release train for the payments app", original);
+  assert.deepEqual(added.filter((issue) => issue.kind === "banned-phrase").map((issue) => issue.value), ["spearheaded"]);
+  const kept = "Spearheaded the on-call rota the team already had";
+  assert.deepEqual(voiceIssues(kept, kept).filter((issue) => issue.kind === "banned-phrase"), []);
+});
+
+test("the rewrite prompt tells the model to keep the original words", () => {
+  const prompt = buildRewritePrompt({ instruction: "Shorter", ...SOURCE, keywords: [] });
+  assert.match(prompt, /Use the original's words/);
+  assert.match(prompt, /No stock phrase and no em dash/);
 });
 
 test("the instruction and the bullet reach the prompt as quoted data", () => {

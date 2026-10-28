@@ -108,6 +108,8 @@ _If `voice-dna.md` exists, its §3 Banned List is the canonical, fuller version 
 - "in today's fast-paced world"
 - "demonstrated ability to" / "best practices" (name the practice)
 
+PDF render, LaTeX compile, and CV Studio reject stock phrasing and an em dash or en dash that your CV does not already contain. `cv-voice.mjs` is that check. Wording that already appears in your CV stays.
+
 ### Unicode normalization for ATS
 `generate-pdf.mjs` automatically normalizes em-dashes, smart quotes, and zero-width characters to ASCII equivalents for maximum ATS compatibility. But avoid generating them in the first place.
 
