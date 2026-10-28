@@ -65,6 +65,7 @@ test("A printed report shows its content without app chrome in either theme", { 
           summary: d.querySelector("summary")?.innerText.trim() ?? "",
           details: d.clientHeight,
           own: d.querySelector("summary")?.offsetHeight ?? 0,
+          text: d.innerText,
         })),
     );
     const expectedSections = ["Role Summary", "Level and Strategy", "Comp and Demand", "Company Notes", "Interview Plan"];
@@ -76,6 +77,18 @@ test("A printed report shows its content without app chrome in either theme", { 
     );
     for (const s of sections) {
       assert.ok(s.details > s.own + 1, `${theme}: "${s.summary}" prints its content, not only its summary`);
+    }
+    // Height alone can come from padding, so check each section's own fixture text.
+    const fixtureText = {
+      "Role Summary": "Fictional role summary for a platform engineering position",
+      "Level and Strategy": "Fictional level analysis",
+      "Comp and Demand": "Fictional compensation notes",
+      "Company Notes": "Paragraph 8 of the fictional company notes",
+      "Interview Plan": "Story 3 with a long descriptive title",
+    };
+    for (const [name, text] of Object.entries(fixtureText)) {
+      const section = sections.find((s) => s.summary.includes(name));
+      assert.ok(section?.text.includes(text), `${theme}: "${name}" prints its text ("${text}")`);
     }
 
     const tables = page.locator("main .report-prose table");
