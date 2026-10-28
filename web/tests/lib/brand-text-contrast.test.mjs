@@ -82,8 +82,14 @@ test("no component colors text with the raw brand fill", async () => {
 });
 
 // text-brand-text/80 blends the token into the surface behind it. On --bg that
-// is about 3.5:1. Icons (capitalized JSX tags such as <Sparkles>) are not text.
-const FADED_BRAND_TEXT = /<([a-z][\w.]*)\b[^<>]*?(?<![\w-])text-brand-text\/(\d+)/g;
+// is about 3.5:1. Icons (capitalized JSX tags such as <Sparkles>) are not text,
+// but a few capitalized components render their children as text, so they are
+// checked like a lowercase tag.
+const TEXT_COMPONENTS = ["Link", "Button"];
+const FADED_BRAND_TEXT = new RegExp(
+  String.raw`<((?:[a-z][\w.]*|${TEXT_COMPONENTS.join("|")})(?![\w.]))[^<>]*?(?<![\w-])text-brand-text\/(\d+)`,
+  "g",
+);
 
 function blend(fg, bg, alpha) {
   const [f, b] = [toRgb(fg), toRgb(bg)];
@@ -112,6 +118,14 @@ test("the faded brand text check reads tags that span lines", async () => {
   const misses = fadedBrandMisses(sample, tokens, "sample.tsx");
   assert.ok(misses.length > 0, "multi-line <span> was missed");
   assert.ok(misses.every((m) => m.startsWith("sample.tsx:2: <span>")), misses.join("\n"));
+});
+
+test("the faded brand text check reads a Link but not a LinkIcon", async () => {
+  const tokens = rootTokens(await readFile(GLOBALS, "utf8"));
+  const sample = '<Link href="/r" className="text-brand-text/60">Report</Link>\n<LinkIcon className="text-brand-text/60" />';
+  const misses = fadedBrandMisses(sample, tokens, "sample.tsx");
+  assert.ok(misses.length > 0, "<Link> text was missed");
+  assert.ok(misses.every((m) => m.startsWith("sample.tsx:1: <Link>")), misses.join("\n"));
 });
 
 test("faded brand text on a text element still reaches AA on every light surface", async () => {
