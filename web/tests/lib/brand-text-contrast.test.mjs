@@ -91,20 +91,35 @@ function blend(fg, bg, alpha) {
   return `#${hex}`;
 }
 
+// Match the whole file, not line by line, so a tag whose className sits on a
+// later line than "<span" is still checked.
+function fadedBrandMisses(source, tokens, label) {
+  const misses = [];
+  for (const m of source.matchAll(FADED_BRAND_TEXT)) {
+    const [, tag, pct] = m;
+    const line = source.slice(0, m.index).split("\n").length;
+    for (const surface of ["bg", "surface", "surface-hover"]) {
+      const ratio = contrast(blend(tokens["brand-text"], tokens[surface], Number(pct) / 100), tokens[surface]);
+      if (ratio < 4.5) misses.push(`${label}:${line}: <${tag}> text-brand-text/${pct} on --${surface} is ${ratio.toFixed(2)}:1`);
+    }
+  }
+  return misses;
+}
+
+test("the faded brand text check reads tags that span lines", async () => {
+  const tokens = rootTokens(await readFile(GLOBALS, "utf8"));
+  const sample = '<div>\n  <span\n    className="text-brand-text/60"\n  >x</span>\n  <Sparkles\n    className="text-brand-text/60" />\n</div>';
+  const misses = fadedBrandMisses(sample, tokens, "sample.tsx");
+  assert.ok(misses.length > 0, "multi-line <span> was missed");
+  assert.ok(misses.every((m) => m.startsWith("sample.tsx:2: <span>")), misses.join("\n"));
+});
+
 test("faded brand text on a text element still reaches AA on every light surface", async () => {
   const tokens = rootTokens(await readFile(GLOBALS, "utf8"));
   const misses = [];
   for (const file of await sourceFiles(SRC)) {
     if (file.endsWith(".css")) continue;
-    const lines = (await readFile(file, "utf8")).split("\n");
-    lines.forEach((line, i) => {
-      for (const [, tag, pct] of line.matchAll(FADED_BRAND_TEXT)) {
-        for (const surface of ["bg", "surface", "surface-hover"]) {
-          const ratio = contrast(blend(tokens["brand-text"], tokens[surface], Number(pct) / 100), tokens[surface]);
-          if (ratio < 4.5) misses.push(`${path.relative(SRC, file)}:${i + 1}: <${tag}> text-brand-text/${pct} on --${surface} is ${ratio.toFixed(2)}:1`);
-        }
-      }
-    });
+    misses.push(...fadedBrandMisses(await readFile(file, "utf8"), tokens, path.relative(SRC, file)));
   }
   assert.deepEqual(misses, [], misses.join("\n"));
 });
