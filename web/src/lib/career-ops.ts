@@ -409,14 +409,21 @@ export function findReportFile(n: string): string | null {
   return containedRealpath(p, root) ? p : null;
 }
 
-/** The report a tracker row's own Report link names, or null when the cell
- *  has no link or the link is not a contained, non-reserved `.md`. */
-function linkedReportFile(app: { report?: string } | undefined, root: string): string | null {
+/** The path a tracker row's own Report link names, or null when the cell has
+ *  no link or the link is not a non-reserved `.md`. Not checked for
+ *  containment: callers do that. */
+function linkedReportPath(app: { report?: string } | undefined, root: string): string | null {
   const linked = firstMarkdownLinkTarget(app?.report);
   if (!linked) return null;
   const p = path.resolve(root, "data", linked);
+  return p.endsWith(".md") && !isReservedReportFile(p) ? p : null;
+}
+
+/** linkedReportPath, kept only when it resolves inside the project. */
+function linkedReportFile(app: { report?: string } | undefined, root: string): string | null {
+  const p = linkedReportPath(app, root);
   // Containment: a hand-edited link must not resolve outside the project.
-  return p.endsWith(".md") && !isReservedReportFile(p) && containedRealpath(p, root) ? p : null;
+  return p && containedRealpath(p, root) ? p : null;
 }
 
 /** Text of the report a tracker row links to, or null. The What's New
@@ -429,13 +436,17 @@ function linkedReportFile(app: { report?: string } | undefined, root: string): s
  *  would hide a second posting with the same title with no signal. */
 export function readLinkedReport(app: { report?: string }): string | null {
   const root = careerOpsRoot();
-  const file = linkedReportFile(app, root);
+  const file = linkedReportPath(app, root);
   if (!file) return null;
   try {
+    // containedRealpath's check, inline: it reads every resolution failure as
+    // "not found", and here only ENOENT may. A reports dir without traversal
+    // permission (EACCES) or a symlink loop (ELOOP) is broken, not absent.
+    if (!fs.realpathSync(file).startsWith(fs.realpathSync(root) + path.sep)) return null;
     // Reports live in the user's runtime checkout, outside the web build graph.
     return fs.readFileSync(/* turbopackIgnore: true */ file, "utf8");
   } catch (err) {
-    // Deleted since linkedReportFile resolved it: missing, so unknown.
+    // Missing, or deleted since it resolved: unknown.
     if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return null;
     // EISDIR's message names no file, so name it here.
     throw new Error(

@@ -20,7 +20,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -141,6 +141,41 @@ test("a linked report that cannot be read is reported, not read as URL-unknown",
   assert.equal(res.status, 500);
   assert.match(res.body.error ?? "", /001-acme-2026-10-01\.md could not be read/);
   assert.match(res.body.error ?? "", /EISDIR/);
+  assert.deepEqual(res.body.offers, []);
+  assert.equal(res.body.count, 0);
+});
+
+test("a linked report whose path cannot be resolved is reported, not read as URL-unknown", (t) => {
+  // The containment check resolves the link first, and that step must not
+  // swallow a failure the read itself would report: a symlink loop (ELOOP)
+  // there is as broken as EISDIR above. ELOOP rather than EACCES on the
+  // reports dir, because it reproduces as root too.
+  const today = new Date().toISOString().slice(0, 10);
+  let linked = true;
+  const root = makeRoot((dir) => {
+    mkdirSync(join(dir, "reports"), { recursive: true });
+    try {
+      symlinkSync("001-acme-2026-10-01.md", join(dir, "reports", "001-acme-2026-10-01.md"));
+    } catch {
+      linked = false;
+    }
+    writeFileSync(join(dir, "data", "applications.md"), [
+      "| # | Date | Company | Role | Score | Status | PDF | Report | Notes |",
+      "|---|---|---|---|---|---|---|---|---|",
+      "| 1 | 2026-10-01 | Acme | Staff Engineer | 4.1/5 | Evaluated | | [1](../reports/001-acme-2026-10-01.md) | |",
+    ].join("\n"));
+    writeFileSync(
+      join(dir, "data", "scan-history.tsv"),
+      `${HISTORY_HEADER}https://boards.greenhouse.io/acme/jobs/2002\t${today}\tgreenhouse\tStaff Engineer\tAcme\tadded\tRemote\n`,
+    );
+  });
+  // Windows without symlink privilege cannot build the fixture.
+  if (!linked) return t.skip("symlinks unavailable");
+  const res = callRoute(root);
+
+  assert.equal(res.status, 500);
+  assert.match(res.body.error ?? "", /001-acme-2026-10-01\.md could not be read/);
+  assert.match(res.body.error ?? "", /ELOOP/);
   assert.deepEqual(res.body.offers, []);
   assert.equal(res.body.count, 0);
 });
