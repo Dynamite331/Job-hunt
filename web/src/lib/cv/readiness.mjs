@@ -40,15 +40,23 @@ function experienceHasRole(text) {
 }
 
 // An HTML comment never renders, so a template note under the heading is not a
-// role. Repeat until nothing changes, so "<!-<!-- x -->- y -->" leaves no comment.
+// role. Openers are matched against the kept text, so "<!-<!-- x -->- y -->"
+// leaves no comment, in one pass. An unclosed opener stays as text.
 /** @param {string} md */
 function withoutHtmlComments(md) {
-  let text = md;
-  for (let prev = ""; prev !== text; ) {
-    prev = text;
-    text = text.replace(/<!--[\s\S]*?-->/g, "");
+  /** @type {string[]} */
+  const kept = [];
+  let i = 0;
+  while (i < md.length) {
+    kept.push(md[i++]);
+    const n = kept.length;
+    if (n < 4 || kept[n - 4] !== "<" || kept[n - 3] !== "!" || kept[n - 2] !== "-" || kept[n - 1] !== "-") continue;
+    const close = md.indexOf("-->", i);
+    if (close === -1) break;
+    kept.length -= 4;
+    i = close + 3;
   }
-  return text;
+  return kept.join("") + md.slice(i);
 }
 
 /**

@@ -64,6 +64,13 @@ test("work authorization is not a role, and a subheading under experience is", (
   assert.equal(cvReadiness("## Experience\n<!-- newest first -->\nFloor lead, Northwind Market").scoreable, true);
 });
 
+test("deeply nested comment markers are stripped in one linear pass", () => {
+  const nested = "## Experience\n" + "<!-".repeat(100_000) + "- -->".repeat(100_000);
+  const started = performance.now();
+  assert.equal(cvReadiness(nested).scoreable, false);
+  assert.ok(performance.now() - started < 1000, "readiness of an 800 KB nested paste took over a second");
+});
+
 test("a range that starts before 2000 is a role", () => {
   assert.equal(cvReadiness("Floor lead, Northwind Market\n1998–2002").scoreable, true);
   assert.equal(cvReadiness("Floor lead, Northwind Market\n1996 - present").scoreable, true);
