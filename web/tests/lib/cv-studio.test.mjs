@@ -11,6 +11,7 @@ import {
   buildStudioDoc,
   emptyEdits,
   parseEdits,
+  applyRecordedEdit,
   pushUndo,
   resolveStudio,
   studioReducer,
@@ -141,6 +142,18 @@ test("the undo history keeps the last 30 states in order and drops the oldest", 
   assert.deepEqual(history.map((e) => e.sourceHash), states.slice(1).map((e) => e.sourceHash));
   assert.equal(history.at(-1), states.at(-1));
   assert.deepEqual(pushUndo([states[0]], states[1], 1), [states[1]]);
+});
+
+test("a wording change recorded after a hide still undoes to the hidden CV", () => {
+  const { doc } = studio();
+  const before = emptyEdits("h1");
+  const hide = applyRecordedEdit(before, { type: "toggle", id: "s2i0b2" }, doc, []);
+  const wording = applyRecordedEdit(hide.edits, { type: "use", id: "s2i0b0", use: { kind: "base" } }, doc, hide.history);
+  assert.ok(wording.edits.hidden.includes("s2i0b2"));
+  assert.equal(wording.edits.use.s2i0b0.kind, "base");
+  const undone = wording.history.at(-1);
+  assert.ok(undone.hidden.includes("s2i0b2"));
+  assert.equal(undone.use.s2i0b0, undefined);
 });
 
 test("undo puts back the edits from before a hide", () => {

@@ -395,3 +395,21 @@ export const UNDO_LIMIT = 30;
 export function pushUndo(history, state, limit = UNDO_LIMIT) {
   return [...history, state].slice(-limit);
 }
+
+/**
+ * Record one edit against the edits on screen now.
+ *
+ * A wording save can call this after an await. The edits argument has to be
+ * the current ones, not the snapshot from when that request started, or Undo
+ * drops a hide that happened in between.
+ *
+ * @param {StudioEdits} current
+ * @param {StudioAction} action
+ * @param {StudioDoc} doc
+ * @param {StudioEdits[]} history
+ */
+export function applyRecordedEdit(current, action, doc, history) {
+  const next = studioReducer(current, action, doc);
+  if (next === current) return { edits: current, history, recorded: false };
+  return { edits: next, history: pushUndo(history, current), recorded: true };
+}

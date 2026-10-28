@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, FileText, Loader2, RotateCcw, Undo2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { arrange, renderBlocks, type BlockTree } from "@/lib/cv-studio/html-blocks.mjs";
-import { emptyEdits, pushUndo, resolveStudio, studioReducer, type StudioAction, type StudioDoc, type StudioEdits } from "@/lib/cv-studio/studio.mjs";
+import { applyRecordedEdit, emptyEdits, resolveStudio, studioReducer, type StudioAction, type StudioDoc, type StudioEdits } from "@/lib/cv-studio/studio.mjs";
 import { SectionCard } from "./section-card";
 import { CvPreview } from "./cv-preview";
 import { CoverageMeter } from "./coverage-meter";
@@ -63,13 +63,16 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
   const [edits, dispatchEdit] = useReducer((e: StudioEdits, a: StudioAction) => studioReducer(e, a, doc), data.edits);
   const history = useRef<StudioEdits[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const latestEdits = useRef(edits);
+  latestEdits.current = edits;
   const recordEdit = useCallback((action: StudioAction) => {
-    const next = studioReducer(edits, action, doc);
-    if (next === edits) return;
-    history.current = pushUndo(history.current, edits);
+    const applied = applyRecordedEdit(latestEdits.current, action, doc, history.current);
+    if (!applied.recorded) return;
+    history.current = applied.history;
+    latestEdits.current = applied.edits;
     setCanUndo(true);
     dispatchEdit(action);
-  }, [doc, edits]);
+  }, [doc]);
   const undo = useCallback(() => {
     const prev = history.current.pop();
     setCanUndo(history.current.length > 0);
@@ -77,11 +80,6 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
     dispatchEdit({ type: "replace", edits: prev });
   }, []);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
-  // The edits on screen now, for a save that finishes after they changed.
-  const latestEdits = useRef(edits);
-  useEffect(() => {
-    latestEdits.current = edits;
-  }, [edits]);
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const resolved = useMemo(() => resolveStudio(doc, edits), [doc, edits]);
   const html = useMemo(() => renderBlocks(tree, resolved.view, { added: resolved.added }), [tree, resolved]);
