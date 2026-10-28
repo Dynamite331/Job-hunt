@@ -39,7 +39,7 @@ export async function PUT(req: Request, { params }: RouteContext) {
 
 export async function POST(req: Request, { params }: RouteContext) {
   const n = (await params).n;
-  const body = await readJsonObject<{ op?: string; edits?: unknown; text?: unknown }>(req);
+  const body = await readJsonObject<{ op?: string; edits?: unknown; text?: unknown; tab?: unknown; rev?: unknown }>(req);
   if (!body) return NextResponse.json({ error: "bad json" }, { status: 400 });
   if (body.op === "keywords") {
     if (typeof body.text !== "string" || body.text.length > 2000) return NextResponse.json({ error: "text required" }, { status: 400 });
@@ -56,6 +56,8 @@ export async function POST(req: Request, { params }: RouteContext) {
   saving.add(load.reportNum);
   const token = acquireTrackerWrite();
   try {
+    // Same order as PUT. An older Save for apply must not land after the page-exit write.
+    if (!putOrder.accept(load.reportNum, body.tab, body.rev)) return NextResponse.json({ ok: true, superseded: true });
     saveEdits(load.reportNum, parsed.edits);
     const result = await renderEditedPdf(load, parsed.edits);
     return result.ok ? NextResponse.json(result) : NextResponse.json({ error: result.error.slice(0, 600) }, { status: 422 });

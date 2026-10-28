@@ -8,6 +8,24 @@
 
 const MAX_TABS = 500;
 
+/**
+ * Whether this payload should be sent.
+ *
+ * A payload the server already has is not sent again, except on the way out
+ * of the page while a different payload is still in flight. That in-flight
+ * save can land after the tab is gone, and the page can no longer correct it.
+ *
+ * @param {string} saved - JSON already stored.
+ * @param {string} current - JSON on screen.
+ * @param {string | null} inflight - JSON of the save that has not finished.
+ * @param {boolean} keepalive - True for the page-exit flush.
+ */
+export function shouldSendEdits(saved, current, inflight, keepalive) {
+  if (current === saved) return keepalive === true && typeof inflight === "string" && inflight !== current;
+  if (current === inflight && keepalive !== true) return false;
+  return true;
+}
+
 export function createPutOrder() {
   /** @type {Map<string, number>} */
   const last = new Map();

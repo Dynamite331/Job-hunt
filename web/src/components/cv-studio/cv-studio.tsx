@@ -6,6 +6,7 @@ import { ArrowLeft, Check, FileText, Loader2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { arrange, renderBlocks, type BlockTree } from "@/lib/cv-studio/html-blocks.mjs";
 import { emptyEdits, resolveStudio, studioReducer, type StudioAction, type StudioDoc, type StudioEdits } from "@/lib/cv-studio/studio.mjs";
+import { shouldSendEdits } from "@/lib/cv-studio/put-order.mjs";
 import { SectionCard } from "./section-card";
 import { CvPreview } from "./cv-preview";
 import { CoverageMeter } from "./coverage-meter";
@@ -98,10 +99,7 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
   const putEdits = useCallback(
     (payload: StudioEdits, keepalive: boolean) => {
       const serialized = JSON.stringify(payload);
-      if (serialized === savedJsonRef.current) return;
-      // An autosave already carrying these edits has no keepalive, so a full
-      // unload can cancel it. On exit, send them again with keepalive.
-      if (serialized === savingJsonRef.current && !keepalive) return;
+      if (!shouldSendEdits(savedJsonRef.current, serialized, savingJsonRef.current, keepalive)) return;
       savingJsonRef.current = serialized;
       showStatus();
       revRef.current += 1;
@@ -154,8 +152,13 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
   const saveForApply = useCallback(async () => {
     setSave({ kind: "saving" });
     try {
-      const r = await send("POST", { op: "save", edits });
-      const body = (await r.json()) as { pdf?: string; indexed?: boolean; warnings?: string[]; error?: string };
+      revRef.current += 1;
+      const r = await send("POST", { op: "save", edits, tab: tabRef.current, rev: revRef.current });
+      const body = (await r.json()) as { pdf?: string; indexed?: boolean; warnings?: string[]; error?: string; superseded?: boolean };
+      if (body.superseded) {
+        setSave({ kind: "failed", error: "A newer edit was saved while this one was sending. Save again to export the latest." });
+        return;
+      }
       setSave(r.ok && body.pdf ? { kind: "saved", pdf: body.pdf, indexed: body.indexed === true, warnings: body.warnings ?? [] } : { kind: "failed", error: SAVE_ERRORS[body.error ?? ""] ?? body.error ?? "Saving failed." });
     } catch {
       setSave({ kind: "failed", error: "Saving failed. Is the dashboard still running?" });
