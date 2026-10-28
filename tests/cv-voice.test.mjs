@@ -55,6 +55,23 @@ test('an en dash in a new line fails and a copied en dash does not', () => {
   assert.deepEqual(fresh.filter((issue) => issue.kind === 'em-dash').map((issue) => issue.value), ['en dash']);
 });
 
+test('a short line copied whole from the CV keeps its dash', () => {
+  const source = 'Program Manager\n2021\u20132024\n';
+  assert.deepEqual(voiceIssues('2021\u20132024', source).filter((issue) => issue.kind === 'em-dash'), []);
+});
+
+test('a date range dash and the page title are not stock wording', () => {
+  const html = [
+    '<html><head><title>Jane Doe \u2014 CV</title></head><body>',
+    '<p>Northwind Payments</p><p>2022\u20132024</p><p>Mar 2020 \u2013 Present</p>',
+    '<p>Ran the weekly release train for the payments app</p>',
+    '</body></html>',
+  ].join('\n');
+  assert.deepEqual(voiceIssues(html, SOURCE).filter((issue) => issue.kind === 'em-dash'), []);
+  const prose = voiceIssues('<p>Shipped in 2024 \u2013 on time</p>', SOURCE);
+  assert.deepEqual(prose.filter((issue) => issue.kind === 'em-dash').map((issue) => issue.value), ['en dash']);
+});
+
 test('a number that is not in the source fails, and one that is does not', () => {
   const invented = voiceIssues('Cut deploy time by 40% with the same checklist', SOURCE);
   assert.ok(invented.some((issue) => issue.kind === 'invented-number' && issue.value === '40%'));
@@ -96,6 +113,27 @@ test('generate-latex blocks a stock verb and still blocks an invented metric', (
     const numberReport = JSON.parse(number.stdout);
     assert.equal(numberReport.factCheck.verdict, 'block');
     assert.match(numberReport.factCheck.reason, /40%/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('generate-latex checks wording against cv.md, not article-digest.md', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cv-voice-digest-'));
+  try {
+    mkdirSync(join(root, 'output'));
+    writeFileSync(join(root, 'cv.md'), SOURCE);
+    writeFileSync(join(root, 'article-digest.md'), '# Notes\n\n- Spearheaded the weekly release train for the payments app\n');
+    writeFileSync(join(root, 'output', 'digest.tex'), '\\documentclass{article}\n\\begin{document}\n\\resumeItem{Spearheaded the weekly release train for the payments app}\n\\end{document}\n');
+    const run = spawnSync(process.execPath, [join(ROOT, 'generate-latex.mjs'), 'output/digest.tex', '--compile-only'], {
+      cwd: root,
+      encoding: 'utf-8',
+      timeout: 30_000,
+      env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '' },
+    });
+    const report = JSON.parse(run.stdout);
+    assert.equal(report.factCheck.verdict, 'block');
+    assert.match(report.factCheck.reason, /spearheaded/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

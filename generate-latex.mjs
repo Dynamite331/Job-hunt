@@ -320,12 +320,13 @@ export async function runLatexFactGate(content, { root = getCareerOpsRoot(), ext
   const missing = extraPaths.filter(p => !existsSync(p));
   if (missing.length) return { verdict: 'block', reason: `--source file not found: ${missing.join(', ')}` };
   const sourcePaths = [cvPath, join(root, 'article-digest.md'), ...extraPaths];
-  let source = '';
-  for (const sourcePath of sourcePaths) {
-    if (!existsSync(sourcePath)) continue;
-    source += `\n${await readFile(sourcePath, 'utf-8')}`;
+  // The voice check allows only wording the candidate wrote: cv.md plus any
+  // --source file. article-digest.md backs facts, not phrasing.
+  let voiceSource = '';
+  for (const sourcePath of [cvPath, ...extraPaths]) {
+    voiceSource += `\n${await readFile(sourcePath, 'utf-8')}`;
   }
-  const voiceError = voiceTellMessage(voiceIssues(content, source), label);
+  const voiceError = voiceTellMessage(voiceIssues(content, voiceSource), label);
   if (voiceError) return { verdict: 'block', reason: voiceError };
   try {
     const result = assertFacts(content, { sourcePaths, configPath: join(root, 'config', 'cv-facts.json'), label });

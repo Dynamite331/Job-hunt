@@ -53,7 +53,7 @@ test("a rewrite that adds spearheaded is a voice failure and a copied spearheade
 test("the rewrite prompt tells the model to keep the original words", () => {
   const prompt = buildRewritePrompt({ instruction: "Shorter", ...SOURCE, keywords: [] });
   assert.match(prompt, /Use the original's words/);
-  assert.match(prompt, /No stock phrase and no em dash/);
+  assert.match(prompt, /No stock phrase, no em dash, and no en dash/);
 });
 
 test("the instruction and the bullet reach the prompt as quoted data", () => {

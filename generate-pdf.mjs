@@ -1624,11 +1624,10 @@ async function runFactGate(html, label, rawHtml = html) {
   const { assertFacts, printFactWarnings } = await import('./verify-cv-facts.mjs');
   const { voiceIssues, voiceTellMessage } = await import('./cv-voice.mjs');
   const inputs = factGateInputs();
-  let source = '';
-  for (const sourcePath of inputs.sourcePaths) {
-    if (!existsSync(sourcePath)) continue;
-    source += `\n${readFileSync(sourcePath, 'utf-8')}`;
-  }
+  // The voice check allows only wording the CV already has. article-digest.md
+  // backs facts, not phrasing, so it stays out of this source.
+  const cvPath = resolve(workspaceRoot, 'cv.md');
+  const source = existsSync(cvPath) ? readFileSync(cvPath, 'utf-8') : '';
   const voiceError = voiceTellMessage(voiceIssues(rawHtml, source), label);
   if (voiceError) throw new Error(voiceError);
   const factCheck = assertFacts(html, { label, ...inputs });

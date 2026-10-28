@@ -37,8 +37,15 @@ function norm(text) {
   return String(text).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// A dash between two dates is how a range is written, not a stock tell. The
+// HTML builder prints "2022–2024" from the start and end fields itself.
+const DATE_RANGE_DASH = /(\d)\s*[\u2013\u2014]\s*(?=\d|present\b|current\b|now\b|today\b)/giu;
+
 function linesOf(text) {
   const broken = String(text)
+    // The <head> is not printed. Its <title> carries the template's own
+    // "Name — CV" separator, which the candidate never wrote.
+    .replace(/<head[\s>][\s\S]*?<\/head>/gi, '\n')
     .replace(/<!--[\s\S]*?-->/g, '\n')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:p|li|h\d|div|tr|section|article)>/gi, '\n');
@@ -61,6 +68,7 @@ function hasPhrase(text, phrase) {
 export function voiceIssues(generated, source) {
   const sourceText = String(source ?? '');
   const sourceNorm = norm(stripMarkup(sourceText));
+  const sourceLines = new Set(linesOf(sourceText).map(norm));
   const issues = [];
   const seen = new Set();
   const push = (kind, value) => {
@@ -71,10 +79,14 @@ export function voiceIssues(generated, source) {
   };
 
   for (const line of linesOf(generated)) {
-    const alreadyInSource = norm(line).length >= 12 && sourceNorm.includes(norm(line));
+    // A whole source line counts at any length, so a copied "2021–2024" stays.
+    // A fragment of one has to be long enough not to match by accident.
+    const lineNorm = norm(line);
+    const alreadyInSource = sourceLines.has(lineNorm) || (lineNorm.length >= 12 && sourceNorm.includes(lineNorm));
     if (alreadyInSource) continue;
-    if (line.includes(EM_DASH)) push('em-dash', 'em dash');
-    if (line.includes(EN_DASH)) push('em-dash', 'en dash');
+    const prose = line.replace(DATE_RANGE_DASH, '$1 ');
+    if (prose.includes(EM_DASH)) push('em-dash', 'em dash');
+    if (prose.includes(EN_DASH)) push('em-dash', 'en dash');
     for (const phrase of BANNED_PHRASES) {
       if (!hasPhrase(line, phrase)) continue;
       if (hasPhrase(sourceText, phrase)) continue;
