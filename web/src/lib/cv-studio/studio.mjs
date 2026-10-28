@@ -379,3 +379,19 @@ function readableRuns(parts) {
   flush();
   return out;
 }
+
+/** How many earlier edit states Undo can step back through. */
+export const UNDO_LIMIT = 30;
+
+/**
+ * The undo history after recording `state`: oldest first, so Undo pops the
+ * most recent. Past the limit the oldest state is dropped.
+ *
+ * @param {StudioEdits[]} history
+ * @param {StudioEdits} state - The edits from before the change being recorded.
+ * @param {number} [limit]
+ * @returns {StudioEdits[]}
+ */
+export function pushUndo(history, state, limit = UNDO_LIMIT) {
+  return [...history, state].slice(-limit);
+}

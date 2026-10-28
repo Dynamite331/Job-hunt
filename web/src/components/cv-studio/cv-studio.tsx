@@ -5,14 +5,19 @@ import Link from "next/link";
 import { ArrowLeft, Check, FileText, Loader2, RotateCcw, Undo2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { arrange, renderBlocks, type BlockTree } from "@/lib/cv-studio/html-blocks.mjs";
-import { emptyEdits, resolveStudio, studioReducer, type StudioAction, type StudioDoc, type StudioEdits } from "@/lib/cv-studio/studio.mjs";
+import { emptyEdits, pushUndo, resolveStudio, studioReducer, type StudioAction, type StudioDoc, type StudioEdits } from "@/lib/cv-studio/studio.mjs";
 import { SectionCard } from "./section-card";
 import { CvPreview } from "./cv-preview";
 import { CoverageMeter } from "./coverage-meter";
 
 type Loaded = { ok: true; reportNum: string; company: string; file: string; tree: BlockTree; doc: StudioDoc; edits: StudioEdits; stale: boolean; hasBase: boolean };
 type LoadState = { kind: "loading" } | { kind: "error"; reason: string } | { kind: "ready"; data: Loaded };
-type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; pdf: string; indexed: boolean; warnings: string[] } | { kind: "failed"; error: string };
+type SaveState =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "saved"; pdf: string; indexed: boolean; warnings: string[] }
+  | { kind: "outdated"; pdf: string }
+  | { kind: "failed"; error: string };
 
 const REASONS: Record<string, { title: string; body: string }> = {
   "no-tailored-cv": { title: "No tailored CV yet", body: "Generate a tailored CV from the report page first. The Studio opens it for review once it exists." },
@@ -21,7 +26,6 @@ const REASONS: Record<string, { title: string; body: string }> = {
 };
 
 const STALE = "This CV was regenerated in another tab. Reload the Studio.";
-const UNDO_LIMIT = 30;
 const SAVE_ERRORS: Record<string, string> = { stale: STALE, busy: "This CV is already being saved. Wait for that save to finish." };
 
 export function CvStudio({ n }: { n: string }) {
@@ -62,7 +66,7 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
   const recordEdit = useCallback((action: StudioAction) => {
     const next = studioReducer(edits, action, doc);
     if (next === edits) return;
-    history.current = [...history.current, edits].slice(-UNDO_LIMIT);
+    history.current = pushUndo(history.current, edits);
     setCanUndo(true);
     dispatchEdit(action);
   }, [doc, edits]);
@@ -73,6 +77,11 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
     dispatchEdit({ type: "replace", edits: prev });
   }, []);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
+  // The edits on screen now, for a save that finishes after they changed.
+  const latestEdits = useRef(edits);
+  useEffect(() => {
+    latestEdits.current = edits;
+  }, [edits]);
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const resolved = useMemo(() => resolveStudio(doc, edits), [doc, edits]);
   const html = useMemo(() => renderBlocks(tree, resolved.view, { added: resolved.added }), [tree, resolved]);
@@ -95,7 +104,7 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
       first.current = false;
       return;
     }
-    setSave((s) => (s.kind === "saved" ? { kind: "idle" } : s));
+    setSave((s) => (s.kind === "saved" || s.kind === "outdated" ? { kind: "idle" } : s));
     const t = setTimeout(() => {
       send("PUT", { edits })
         .then((r) => setAutosaveError(r.ok ? null : r.status === 409 ? STALE : "Autosave failed. Your latest changes are not saved yet."))
@@ -106,10 +115,18 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
 
   const saveForApply = useCallback(async () => {
     setSave({ kind: "saving" });
+    const sent = edits;
     try {
-      const r = await send("POST", { op: "save", edits });
+      const r = await send("POST", { op: "save", edits: sent });
       const body = (await r.json()) as { pdf?: string; indexed?: boolean; warnings?: string[]; error?: string };
-      setSave(r.ok && body.pdf ? { kind: "saved", pdf: body.pdf, indexed: body.indexed === true, warnings: body.warnings ?? [] } : { kind: "failed", error: SAVE_ERRORS[body.error ?? ""] ?? body.error ?? "Saving failed." });
+      if (!r.ok || !body.pdf) {
+        setSave({ kind: "failed", error: SAVE_ERRORS[body.error ?? ""] ?? body.error ?? "Saving failed." });
+      } else if (latestEdits.current !== sent) {
+        // An edit or an Undo landed while this PDF rendered, so it is not what the page shows.
+        setSave({ kind: "outdated", pdf: body.pdf });
+      } else {
+        setSave({ kind: "saved", pdf: body.pdf, indexed: body.indexed === true, warnings: body.warnings ?? [] });
+      }
     } catch {
       setSave({ kind: "failed", error: "Saving failed. Is the dashboard still running?" });
     }
@@ -176,6 +193,9 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
             <span key={w} className="mt-1 block text-xs opacity-80">{w}</span>
           ))}
         </Notice>
+      )}
+      {save.kind === "outdated" && (
+        <Notice tone="warn">Saved {save.pdf} from the CV as it was when you clicked Save. You changed it since, so Save for apply again before you apply.</Notice>
       )}
       {save.kind === "failed" && <Notice tone="error">{save.error}</Notice>}
       {autosaveError && <Notice tone="error">{autosaveError}</Notice>}

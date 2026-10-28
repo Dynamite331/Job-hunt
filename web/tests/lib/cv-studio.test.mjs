@@ -11,8 +11,10 @@ import {
   buildStudioDoc,
   emptyEdits,
   parseEdits,
+  pushUndo,
   resolveStudio,
   studioReducer,
+  UNDO_LIMIT,
   wordDiff,
 } from "../../src/lib/cv-studio/studio.mjs";
 
@@ -128,6 +130,17 @@ test("each bullet knows its original, its change, and the keywords that drove it
   );
   assert.deepEqual(techfin.restorable, [{ text: "Ran the on-call rotation for the model serving stack", keywords: ["on-call"] }]);
   assert.equal(doc.sections[0].items[0].bullets[0].base, "Full-stack AI engineer building production ML systems.");
+});
+
+test("the undo history keeps the last 30 states in order and drops the oldest", () => {
+  const states = Array.from({ length: 31 }, (_, i) => emptyEdits(`h${i}`));
+  let history = [];
+  for (const state of states) history = pushUndo(history, state);
+  assert.equal(history.length, UNDO_LIMIT);
+  assert.equal(UNDO_LIMIT, 30);
+  assert.deepEqual(history.map((e) => e.sourceHash), states.slice(1).map((e) => e.sourceHash));
+  assert.equal(history.at(-1), states.at(-1));
+  assert.deepEqual(pushUndo([states[0]], states[1], 1), [states[1]]);
 });
 
 test("undo puts back the edits from before a hide", () => {
