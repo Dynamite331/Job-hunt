@@ -113,6 +113,17 @@ test('rows the tracker already holds, unapplied stages and unknown stages are no
   });
 });
 
+test('a stage named like an object property is an unknown stage, not a crash', () => {
+  const csv = 'Company,Title,Status\nAcme Example,Analyst,constructor\nGlobex Example,Engineer,Applied\n';
+  withRoot({ csv }, (fx) => {
+    const r = run(fx, ['--confirm']);
+    assert.equal(r.status, 0, describeSpawn(r));
+    const text = readFileSync(fx.trackerPath, 'utf-8');
+    assert.equal(rowFor(text, 'Acme Example'), undefined);
+    assert.equal(rowFor(text, 'Globex Example')[6], 'Applied');
+  });
+});
+
 test('a second import of the same file adds nothing', () => {
   withRoot({}, (fx) => {
     assert.equal(run(fx, ['--confirm']).status, 0);

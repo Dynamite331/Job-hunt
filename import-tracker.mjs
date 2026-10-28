@@ -181,7 +181,9 @@ export function inferDayFirst(values) {
 export function resolveStage(raw, states) {
   const s = String(raw ?? '').trim();
   if (!s) return 'Applied';
-  return resolveCanonicalState(s, states) ?? OTHER_TRACKER_STAGES[headerKey(s)] ?? null;
+  const key = headerKey(s);
+  return resolveCanonicalState(s, states)
+    ?? (Object.hasOwn(OTHER_TRACKER_STAGES, key) ? OTHER_TRACKER_STAGES[key] : null);
 }
 
 const roleKey = (company, role) => `${normalizeTextKey(company)}\u0000${normalizeTextKey(role)}`;
