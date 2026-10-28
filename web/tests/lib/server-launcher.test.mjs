@@ -288,6 +288,54 @@ test("an unknown command prints usage and exits 1 without starting next", () => 
   assert.ok(run.stderr.includes("Usage: node server.mjs"), "usage should be printed");
 });
 
+test("starting the dashboard starts the PDF painter and does not wait for it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "career-ops-launcher-"));
+  const web = join(root, "web");
+  const marker = join(root, "painter.pid");
+  let pid = 0;
+  try {
+    mkdirSync(join(web, "src"), { recursive: true });
+    cpSync(join(WEB_ROOT, "server.mjs"), join(web, "server.mjs"));
+    cpSync(join(WEB_ROOT, "src", "lib"), join(web, "src", "lib"), { recursive: true });
+    const nextDir = join(web, "node_modules", "next", "dist", "bin");
+    mkdirSync(nextDir, { recursive: true });
+    writeFileSync(
+      join(web, "node_modules", "next", "package.json"),
+      JSON.stringify({ name: "next", version: "0.0.0-stub", bin: { next: "./dist/bin/next.js" } }),
+    );
+    writeFileSync(join(nextDir, "next.js"), "console.log(JSON.stringify(process.argv.slice(2)));\n");
+    writeFileSync(
+      join(root, "generate-pdf.mjs"),
+      `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(marker)}, String(process.pid));\nsetInterval(() => {}, 1e9);\n`,
+    );
+    const started = Date.now();
+    const result = spawnSync(process.execPath, [join(web, "server.mjs"), "dev"], {
+      encoding: "utf8",
+      timeout: 15_000,
+      env: { PATH: process.env.PATH },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), ["dev", "-H", "127.0.0.1"]);
+    assert.ok(Date.now() - started < 10_000, "the launcher waited for the painter");
+    const deadline = Date.now() + 2_000;
+    while (Date.now() < deadline) {
+      try {
+        pid = Number(readFileSync(marker, "utf8"));
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    }
+    assert.ok(pid > 0, "the painter did not start");
+    process.kill(pid, 0);
+  } finally {
+    if (pid > 0) {
+      try { process.kill(pid, "SIGTERM"); } catch {}
+    }
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // --- the scripts that reach it --------------------------------------------
 
 const pkg = JSON.parse(readFileSync(join(WEB_ROOT, "package.json"), "utf8"));
