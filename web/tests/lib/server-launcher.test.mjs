@@ -336,8 +336,19 @@ test("starting the dashboard starts the PDF painter from the repo root and does 
   } finally {
     if (pid > 0) {
       try { process.kill(pid, "SIGTERM"); } catch {}
+      // The painter's cwd is the temp root now, and Windows will not remove a
+      // directory a live process is sitting in. Wait for it to exit first.
+      const gone = Date.now() + 5_000;
+      while (Date.now() < gone) {
+        try {
+          process.kill(pid, 0);
+        } catch {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
     }
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
