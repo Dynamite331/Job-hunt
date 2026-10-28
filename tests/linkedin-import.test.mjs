@@ -9,6 +9,7 @@ import {
   linkedInJobsFromText,
   planLinkedInImport,
   linkedInOffers,
+  MAX_FIELD_LENGTH,
   LINKEDIN_DOCTOR_LABEL,
   linkedInPluginFix,
 } from '../lib/linkedin-import.mjs';
@@ -101,6 +102,17 @@ test('a title above the link is kept, and a slug fills in when the paste has no 
   assert.equal(offers[1].title, 'Staff Analyst Quill');
   assert.equal(offers[1].company, 'LinkedIn');
   assert.equal(offers[1].url, `https://www.linkedin.com/jobs/view/${B}`);
+});
+
+test('a pasted title or company longer than the bound is cut, and one at the bound is kept', () => {
+  const atLimit = 'T'.repeat(MAX_FIELD_LENGTH);
+  const tooLong = `Northwind Market ${'operations '.repeat(40)}`.trim();
+  const text = [atLimit, tooLong, `https://www.linkedin.com/jobs/view/${A}`].join('\n');
+  const [offer] = linkedInOffers(linkedInJobsFromText(text), text);
+  assert.equal(offer.title, atLimit);
+  assert.equal(offer.company.length, MAX_FIELD_LENGTH);
+  assert.ok(offer.company.startsWith('Northwind Market operations'));
+  assert.ok(offer.company.endsWith('…'));
 });
 
 test('a Remote title stays a title, and Remote US or Remote Europe stays a place', () => {
