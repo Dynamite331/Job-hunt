@@ -27,6 +27,9 @@ test('each place in a joined location gets its own country-code check', () => {
     assert.equal(filter(location), false, `${location} stays blocked`);
   }
   assert.equal(filter('Toronto, ON, CA · Austin, TX, US'), true, 'a US place in the list still passes');
+  assert.equal(filter('Toronto, Canada; Austin TX, US'), true, 'a state before the country slot still passes');
+  assert.equal(filter('Austin TX, US'), true);
+  assert.equal(filter('Dublin, OH'), true, 'City, ST is not a country slot');
 });
 
 test('US states still rescue City, ST and City, ST, Country forms', () => {

@@ -504,13 +504,15 @@ function compileUsStateAbbrev(abbr) {
 // also USPS codes: "Bengaluru, Karnataka, IN" read as Indiana and "Toronto,
 // ON, CA" as California, so always_allow beat the user's own block entry.
 // A two-letter last part after two or more parts is the country slot, never
-// a state. "Austin, TX, US" still keeps TX. Providers join several places
-// with "; " (Lever) or " · " (Jobvite), so each place gets its own check:
+// a state. "Austin, TX, US" still keeps TX. So does "Austin TX, US", where the
+// state sits in the city part. Providers join several places with "; "
+// (Lever) or " · " (Jobvite), so each place gets its own check:
 // "Bengaluru, Karnataka, IN; Remote" must still drop IN.
 function withoutCountryCodeSlot(lower) {
   return lower.split(/([;·])/).map((place) => {
     const parts = place.split(',');
-    if (parts.length < 3 || !/^\s*\p{L}{2}\s*$/u.test(parts.at(-1))) return place;
+    if (parts.length < 2 || !/^\s*\p{L}{2}\s*$/u.test(parts.at(-1))) return place;
+    if (parts.length === 2 && !/(?:^|[^\p{L}\p{M}\p{N}])\p{L}{2}\s*$/u.test(parts[0])) return place;
     return parts.slice(0, -1).join(',');
   }).join('');
 }
