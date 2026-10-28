@@ -64,6 +64,18 @@ test("work authorization is not a role, and a subheading under experience is", (
   assert.equal(cvReadiness("## Experience\n<!-- newest first -->\nFloor lead, Northwind Market").scoreable, true);
 });
 
+test("a range that starts before 2000 is a role", () => {
+  assert.equal(cvReadiness("Floor lead, Northwind Market\n1998–2002").scoreable, true);
+  assert.equal(cvReadiness("Floor lead, Northwind Market\n1996 - present").scoreable, true);
+});
+
+test("a markdown rule under experience is not a role", () => {
+  for (const rule of ["---", "***", "___", "- - -"]) {
+    assert.equal(cvReadiness(`## Experience\n${rule}\n## Skills\nScheduling`).scoreable, false, rule);
+  }
+  assert.equal(cvReadiness("## Experience\n---\nFloor lead, Northwind Market").scoreable, true);
+});
+
 const SECTIONS = [
   { heading: "## Your Target Roles", state: "filled" },
   { heading: "## Your Deal Breakers", state: "missing" },

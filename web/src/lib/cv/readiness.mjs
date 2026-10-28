@@ -5,7 +5,9 @@
 /** @typedef {{ scoreable: boolean; words: number; hasExperience: boolean; hasSkills: boolean; hint?: string }} CvReadiness */
 
 const ROLE_HEADING = /^(#{1,3})\s*(?:work\s+experience|professional\s+experience|experience|work|employment|empleo|experiencia)\s*:?\s*#*\s*$/i;
-const YEAR_RANGE = /\b(20\d\d)\s*[-–—]\s*(20\d\d|present|now|actualidad)/i;
+// A markdown rule such as "---" or "* * *" draws a line, not a role.
+const MD_RULE = /^([-*_])(?:\s*\1){2,}$/;
+const YEAR_RANGE = /\b((?:19|20)\d\d)\s*[-–—]\s*((?:19|20)\d\d|present|now|actualidad)/i;
 
 /** @param {string} text */
 function experienceHeading(text) {
@@ -25,7 +27,7 @@ function experienceHasRole(text) {
     const level = heading[1].length;
     for (let j = i + 1; j < lines.length; j++) {
       const line = lines[j].trim();
-      if (!line) continue;
+      if (!line || MD_RULE.test(line)) continue;
       const sub = /^(#+)\s+\S/.exec(line);
       if (sub) {
         if (sub[1].length <= level) break;
