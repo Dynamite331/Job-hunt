@@ -80,3 +80,31 @@ test("no component colors text with the raw brand fill", async () => {
     `${hits.length} text uses of the raw brand orange (about 3:1 on light surfaces); use text-brand-text / var(--color-brand-text):\n${hits.join("\n")}`,
   );
 });
+
+// text-brand-text/80 blends the token into the surface behind it. On --bg that
+// is about 3.5:1. Icons (capitalized JSX tags such as <Sparkles>) are not text.
+const FADED_BRAND_TEXT = /<([a-z][\w.]*)\b[^<>]*?(?<![\w-])text-brand-text\/(\d+)/g;
+
+function blend(fg, bg, alpha) {
+  const [f, b] = [toRgb(fg), toRgb(bg)];
+  const hex = f.map((c, i) => Math.round((alpha * c + (1 - alpha) * b[i]) * 255).toString(16).padStart(2, "0")).join("");
+  return `#${hex}`;
+}
+
+test("faded brand text on a text element still reaches AA on every light surface", async () => {
+  const tokens = rootTokens(await readFile(GLOBALS, "utf8"));
+  const misses = [];
+  for (const file of await sourceFiles(SRC)) {
+    if (file.endsWith(".css")) continue;
+    const lines = (await readFile(file, "utf8")).split("\n");
+    lines.forEach((line, i) => {
+      for (const [, tag, pct] of line.matchAll(FADED_BRAND_TEXT)) {
+        for (const surface of ["bg", "surface", "surface-hover"]) {
+          const ratio = contrast(blend(tokens["brand-text"], tokens[surface], Number(pct) / 100), tokens[surface]);
+          if (ratio < 4.5) misses.push(`${path.relative(SRC, file)}:${i + 1}: <${tag}> text-brand-text/${pct} on --${surface} is ${ratio.toFixed(2)}:1`);
+        }
+      }
+    });
+  }
+  assert.deepEqual(misses, [], misses.join("\n"));
+});
