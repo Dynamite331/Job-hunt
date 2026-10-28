@@ -14,6 +14,17 @@ export const PREVIEW_PAGE_PX = 1056;
 export function contentHeightPx(doc) {
   const body = doc?.body;
   if (!body) return 0;
+  // A user template can lay its CV out as several sibling .page boxes.
+  // Measure from the top of the first to the bottom of the last.
+  const pages = typeof body.querySelectorAll === "function" ? [...body.querySelectorAll(".page")] : [];
+  if (pages.length > 1) {
+    const boxes = pages.map((p) => {
+      const rect = p.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.top + Math.max(rect.height, p.scrollHeight || 0) };
+    });
+    const extent = Math.max(...boxes.map((b) => b.bottom)) - Math.min(...boxes.map((b) => b.top));
+    return extent > 0 ? extent : 0;
+  }
   const page = typeof body.querySelector === "function" ? body.querySelector(".page") : null;
   const box = page || body;
   const height = box.scrollHeight || box.offsetHeight || 0;

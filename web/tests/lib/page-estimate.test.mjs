@@ -31,6 +31,24 @@ test("content taller than one page estimates two", () => {
   assert.equal(previewPageCount(PREVIEW_PAGE_PX + 1), 2);
 });
 
+test("sibling .page boxes are measured from the first one's top to the last one's bottom", () => {
+  const page = (top, height) => ({ scrollHeight: height, getBoundingClientRect: () => ({ top, height }) });
+  const pages = [page(8, 1000), page(1024, 900)];
+  const twoPages = {
+    body: {
+      scrollHeight: 1000,
+      querySelector: () => pages[0],
+      querySelectorAll(sel) {
+        assert.equal(sel, ".page");
+        return pages;
+      },
+    },
+    documentElement: { scrollHeight: 1932 },
+  };
+  assert.equal(contentHeightPx(twoPages), 1916);
+  assert.equal(previewPageCount(contentHeightPx(twoPages)), 2);
+});
+
 test("an unmeasured preview estimates one page", () => {
   assert.equal(contentHeightPx(null), 0);
   assert.equal(previewPageCount(0), 1);
