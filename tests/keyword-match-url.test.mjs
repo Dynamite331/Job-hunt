@@ -1,6 +1,3 @@
-// tests/keyword-match-url.test.mjs — URL / --jd-text keyword coverage path.
-// Pure helpers refuse thin or missing JD bodies without inventing coverage;
-// CLI --jd-text scores when the pasted body has known skills.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -21,9 +18,6 @@ const {
   parseMatchArgs,
 } = await import(pathToFileURL(join(ROOT, 'keyword-match.mjs')).href);
 
-// Same cap fetch-jd.mjs / keyword-match URL path use; gate takes it for symmetry.
-const TEXT_CAP = 20_000;
-
 const dir = mkdtempSync(join(tmpdir(), 'kw-url-'));
 const cvPath = join(dir, 'cv.md');
 writeFileSync(cvPath, '# Candidate\n\nBuilt Python services and Docker images.\n');
@@ -35,7 +29,6 @@ function runCli(extraArgs) {
   });
 }
 
-/** JD body long enough to clear the shared floor, with known skills. */
 function richJd() {
   return [
     'Qualifications',
@@ -48,7 +41,7 @@ function richJd() {
 
 try {
   check('gateUrlJdResult refuses a null fetch (no coverage fields)', () => {
-    const gated = gateUrlJdResult('https://example.com/jobs/1', null, TEXT_CAP, null);
+    const gated = gateUrlJdResult('https://example.com/jobs/1', null, null);
     assert.equal(gated.ok, false);
     assert.equal(gated.code, 'fetch-miss');
     assert.match(gated.message, /--jd-text/);
@@ -60,7 +53,6 @@ try {
     const gated = gateUrlJdResult(
       'https://example.com/jobs/1',
       { text: 'short', title: 'Role' },
-      TEXT_CAP,
       { code: 'empty_text', error: 'extracted 5 chars of JD text (minimum 200)' },
     );
     assert.equal(gated.ok, false);
@@ -75,7 +67,6 @@ try {
     const gated = gateUrlJdResult(
       'https://example.com/jobs/1',
       { text, title: 'Engineer', ats: 'example' },
-      TEXT_CAP,
       null,
     );
     assert.equal(gated.ok, true);

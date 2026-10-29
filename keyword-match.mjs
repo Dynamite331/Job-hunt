@@ -463,7 +463,7 @@ export function formatCoverageMarkdown(result, sourceLabel, keywordNote) {
   return out.join('\n');
 }
 
-// Caps match fetch-jd.mjs so URL mode and the standalone JD fetcher agree.
+// Same caps as fetch-jd.mjs.
 const TEXT_CAP = 20_000;
 const TIMEOUT_MS = 15_000;
 
@@ -473,12 +473,10 @@ const USAGE =
 const MIXED_SOURCES =
   'use exactly one of <report>, --url, --jd-text';
 
-/** Ask for a better posting link or pasted JD — never names an ATS vendor. */
 const REFUSE_BETTER_SOURCE =
   'Provide a better link, or pass --jd-text <file> with the pasted description.';
 
 /**
- * Exactly one JD keyword source per run.
  * @typedef {{ kind: 'report', reportPath: string }
  *   | { kind: 'url', url: string }
  *   | { kind: 'jd-text', textPath: string }} MatchInput
@@ -489,7 +487,6 @@ const REFUSE_BETTER_SOURCE =
  */
 
 /**
- * Shared JD-body gate. ok:false means refuse to score (no partial coverage).
  * @typedef {{ ok: true, text: string, title: string | null, ats: string | null }
  *   | { ok: false, code: 'fetch-miss' | 'insufficient' | 'unavailable' | 'empty-input',
  *       message: string, url?: string }} JdBody
@@ -505,30 +502,20 @@ const REFUSE_BETTER_SOURCE =
  */
 
 /**
- * Turn raw JD prose into the keyword list used for scoring.
- * Same vocabulary path as the archived-JD report fallback (extractSkills).
- *
  * @param {string} jdText
- * @returns {string[]} Sorted unique skill/keyword strings.
+ * @returns {string[]}
  */
 export function keywordsFromJdText(jdText) {
   return [...extractSkills(jdText)].sort();
 }
 
 /**
- * Pure gate over a fetchJdViaKnownApi result (or a synthetic file body) plus
- * the matching jdFailure outcome. Caller supplies `failure` from
- * jdFailure(result, textCap) so this module never statically imports
- * browser-extract (Playwright via liveness-browser).
- *
- * @param {string} url - Posting URL or jd-text path label for refuse copy.
+ * @param {string} url
  * @param {null | { text: string, title?: string, ats?: string }} fetchResult
- * @param {number} textCap - Cap paired with jdFailure; kept for call-site symmetry.
  * @param {{ code: string, error?: string } | null} [failure]
  * @returns {JdBody}
  */
-export function gateUrlJdResult(url, fetchResult, textCap, failure = null) {
-  void textCap;
+export function gateUrlJdResult(url, fetchResult, failure = null) {
   if (!fetchResult) {
     return {
       ok: false,
@@ -572,11 +559,11 @@ export function gateUrlJdResult(url, fetchResult, textCap, failure = null) {
  * @returns {Promise<JdBody>}
  */
 export async function resolveUrlJdBody(url, { textCap = TEXT_CAP, timeoutMs = TIMEOUT_MS } = {}) {
-  // Dynamic import keeps report-mode import/test free of Playwright.
+  // Dynamic import: browser-extract pulls Playwright via liveness-browser.
   const { fetchJdViaKnownApi, jdFailure } = await import('./browser-extract.mjs');
   const result = await fetchJdViaKnownApi(url, textCap, timeoutMs);
   const failure = result ? jdFailure(result, textCap) : null;
-  return gateUrlJdResult(url, result, textCap, failure);
+  return gateUrlJdResult(url, result, failure);
 }
 
 /**
@@ -613,7 +600,7 @@ export async function resolveJdTextFile(textPath, { textCap = TEXT_CAP } = {}) {
   }
   const { jdFailure } = await import('./browser-extract.mjs');
   const synthetic = { url: textPath, text, bodyText: text, title: '' };
-  return gateUrlJdResult(textPath, synthetic, textCap, jdFailure(synthetic, textCap));
+  return gateUrlJdResult(textPath, synthetic, jdFailure(synthetic, textCap));
 }
 
 /**
@@ -636,8 +623,6 @@ function takeFlagValue(flag, argv, i) {
 }
 
 /**
- * Parse argv into CliArgs. Rejects mixed sources (report + --url, etc.).
- *
  * @param {string[]} argv
  * @returns {CliArgs}
  */
@@ -835,7 +820,6 @@ function runSelfTest() {
   const thinGate = gateUrlJdResult(
     'https://example.com/jobs/1',
     { text: 'x', title: '' },
-    TEXT_CAP,
     { code: 'empty_text', error: 'extracted 1 chars of JD text (minimum 200)' },
   );
   if (thinGate.ok || thinGate.code !== 'insufficient') failures.push('gateUrlJdResult must refuse thin body');
@@ -843,7 +827,7 @@ function runSelfTest() {
     failures.push('gate refuse copy must stay vendor-agnostic');
   }
 
-  const nullGate = gateUrlJdResult('https://example.com/jobs/1', null, TEXT_CAP, null);
+  const nullGate = gateUrlJdResult('https://example.com/jobs/1', null, null);
   if (nullGate.ok || nullGate.code !== 'fetch-miss') failures.push('gateUrlJdResult must refuse null fetch');
 
   try {
@@ -909,7 +893,6 @@ async function runKeywordMatch(args) {
     : formatCoverageMarkdown(result, sourceLabel, keywordNote));
 }
 
-// --- CLI (guarded so importing this module never runs it) ---
 if (isMainModule(import.meta.url)) {
   let args;
   try {
